@@ -14,7 +14,41 @@
 
 ## Status
 
-🚧 Early preview. This repository currently contains the landing page and documentation site.
+🚧 Early preview. This repository currently contains the landing page and documentation site. The harness itself is built next, phase by phase (see [Roadmap](src/app/docs/roadmap/page.mdx)).
+
+## Run the site locally
+
+You need Node.js 20+ and pnpm.
+
+```bash
+pnpm install
+pnpm dev        # http://localhost:3000
+```
+
+Other scripts:
+
+```bash
+pnpm lint       # ESLint
+pnpm typecheck  # Next.js route types + tsc
+pnpm build      # production build
+```
+
+## What's inside
+
+```text
+src/
+├── app/
+│   ├── page.tsx            # landing page
+│   └── docs/               # MDX docs (one folder per page)
+├── components/
+│   ├── landing/            # hero, pillars, animated features, mascot, footer
+│   ├── docs/               # docs shell, Cmd+K search, MDX components
+│   └── ui/rail-toc.tsx     # "On this page" rail
+├── kit/                    # stageshow kit for animated product demos
+└── lib/                    # site config, docs nav, Shiki helpers
+```
+
+Built with Next.js 16, React 19, Tailwind CSS v4, Motion, Shiki and cmdk.
 
 ## License
 
