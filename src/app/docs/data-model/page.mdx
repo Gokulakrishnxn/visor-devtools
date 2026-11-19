@@ -1,0 +1,35 @@
+export const metadata = { title: "Data model" };
+
+Everything is stored locally in SQLite (WAL mode) through Drizzle ORM. IDs are ULIDs; money columns are integer micro-dollars.
+
+## sessions
+
+`id`, `workspace_path`, `title`, `model_id`, `effort_level`, `budget_cap_micro_usd`, `total_cost_micro_usd`, `status` (`running` · `paused` · `completed` · `aborted_budget` · `error`), `started_at`, `ended_at`
+
+## turns
+
+`id`, `session_id`, `turn_index`, `user_prompt`, `input_tokens`, `cache_write_tokens`, `cache_read_tokens`, `output_tokens`, `thinking_tokens`, `cost_micro_usd`, `cache_savings_micro_usd`, `context_used_tokens`, `context_limit_tokens`, `context_breakdown_json`, `compacted`, `started_at`, `ended_at`
+
+## spans
+
+`id`, `session_id`, `turn_id`, `parent_span_id`, `span_type`, `name`, `file_path`, `status`, `input_json`, `output_json`, `diff_text`, `error_message`, `cost_micro_usd`, `latency_ms`, `started_at`, `ended_at`
+
+## credit_ledger
+
+`id`, `session_id`, `entry_type` (`deposit` · `debit` · `adjustment`), `amount_micro_usd`, `balance_after_micro_usd`, `note`, `created_at`
+
+## policy_audit_log
+
+`id`, `session_id`, `span_id`, `tool_name`, `matched_rule`, `decision` (`approved` · `edited` · `denied` · `auto_blocked`), `original_input_json`, `final_input_json`, `operator_note`, `created_at`
+
+```ts
+export const spans = sqliteTable("spans", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull().references(() => sessions.id),
+  parentSpanId: text("parent_span_id"),
+  spanType: text("span_type").notNull(),
+  status: text("status").notNull(),
+  costMicroUsd: integer("cost_micro_usd").notNull().default(0),
+  latencyMs: integer("latency_ms"),
+});
+```

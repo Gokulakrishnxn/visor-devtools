@@ -1,0 +1,42 @@
+export const metadata = { title: "Configuration" };
+
+Project settings live in `.visor.json` at the workspace root. A full example ships as `.visor.example.json`.
+
+```json
+{
+  "model": "claude-opus-5-5",
+  "effort": "medium",
+  "budget": { "sessionCapUsd": 5, "turnCapUsd": 1 },
+  "breakpoints": [
+    { "tool": "Bash", "match": "git push --force|rm -rf", "rule": "destructive-git" },
+    { "tool": "Edit", "path": "src/server/db/**", "rule": "schema-change" },
+    { "tool": "mcp:*", "write": true, "rule": "mcp-write" }
+  ],
+  "triggers": [
+    { "type": "path", "pattern": "\\.env|id_rsa", "action": "block" },
+    { "type": "tokens", "above": 200000, "action": "notify" }
+  ],
+  "mcpServers": {
+    "filesystem": { "command": "npx", "args": ["@modelcontextprotocol/server-filesystem", "."] },
+    "github": { "command": "npx", "args": ["@modelcontextprotocol/server-github"] }
+  }
+}
+```
+
+## Options
+
+<Field name="model" type="string">Default model ID, for example `claude-opus-5-5`.</Field>
+<Field name="effort" type="&quot;low&quot; | &quot;medium&quot; | &quot;high&quot;">Reasoning effort level.</Field>
+<Field name="budget" type="object">Hard caps in USD. Converted to micro-dollars internally.</Field>
+<Field name="breakpoints" type="Rule[]">Tool calls that pause for Approve / Edit JSON / Deny.</Field>
+<Field name="triggers" type="Trigger[]">Desktop notifications or auto-blocks for paths, errors and token spikes.</Field>
+<Field name="mcpServers" type="Record<string, Server>">MCP servers to connect for this workspace.</Field>
+
+## Files on disk
+
+| Path | Purpose | Mode |
+| --- | --- | --- |
+| `~/.visor/` | App data | `0700` |
+| `~/.visor/traces.db` | SQLite traces (WAL) | `0600` |
+| `~/.visor/pricing.json` | Pricing overrides | `0600` |
+| `.env` | `ANTHROPIC_API_KEY` | never committed |

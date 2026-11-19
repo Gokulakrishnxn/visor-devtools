@@ -1,0 +1,29 @@
+export const metadata = { title: "CLI" };
+
+V.I.S.O.R. is a GUI first. The `vhud` command is a thin launcher that starts the local daemon and opens the window.
+
+## Commands
+
+```bash
+vhud                 # open the GUI for the current directory
+vhud --cap 5         # hard $5.00 session budget
+vhud --model claude-sonnet-5-5 --effort high
+vhud doctor          # health checks
+```
+
+## vhud doctor
+
+Checks, in order:
+
+1. `ANTHROPIC_API_KEY` is set (never printed)
+2. `~/.visor` is `0700` and `traces.db` is `0600`
+3. SQLite opens in WAL mode
+4. Each configured MCP server starts and lists its tools
+
+```text
+✓ ANTHROPIC_API_KEY found
+✓ ~/.visor permissions 0700
+✓ traces.db permissions 0600 · WAL
+✓ mcp filesystem · 11 tools
+✗ mcp postgres · connection refused
+```
