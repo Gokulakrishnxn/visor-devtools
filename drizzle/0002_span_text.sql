@@ -1,0 +1,1 @@
+ALTER TABLE `spans` ADD `text_content` text;

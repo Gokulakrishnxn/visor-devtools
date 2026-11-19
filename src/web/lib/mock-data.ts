@@ -1,28 +1,9 @@
-// Static demo data around the live mock run: past sessions, the prepaid
-// wallet, MCP server health and project memory. All money in integer µUSD.
-
-export type PastSession = { id: string; title: string; status: "completed" | "aborted_budget" | "error"; costMicroUsd: number; when: string };
-
-export const WORKSPACE = { name: "acme-api", path: "~/code/acme-api", branch: "fix/auth-flake" };
-
-export const PAST_SESSIONS: PastSession[] = [
-  { id: "past-1", title: "Pricing registry overrides", status: "completed", costMicroUsd: 182_400, when: "2h ago" },
-  { id: "past-2", title: "Migrate users table", status: "aborted_budget", costMicroUsd: 1_000_000, when: "Yesterday" },
-  { id: "past-3", title: "Rate limiter for /login", status: "completed", costMicroUsd: 96_210, when: "Yesterday" },
-  { id: "past-4", title: "Flaky e2e on Safari", status: "error", costMicroUsd: 41_380, when: "Mon" },
-];
+// Static display data: MCP server health (until 3.5 reads it live) and context colors.
 
 export const MCP_SERVERS = [
   { name: "filesystem", online: true, tools: 11 },
   { name: "github", online: true, tools: 26 },
   { name: "postgres", online: false, tools: 0 },
-];
-
-export const PROJECT_MEMORY = [
-  "Use pnpm, never npm.",
-  "Tests live in tests/, run with `pnpm test`.",
-  "Never force-push main; open a PR from a branch.",
-  "Auth tokens are refreshed async; always await refreshToken().",
 ];
 
 export const CONTEXT_META = {
