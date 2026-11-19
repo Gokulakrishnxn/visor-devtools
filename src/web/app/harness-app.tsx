@@ -135,7 +135,7 @@ export function HarnessApp() {
       </AnimatePresence>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] px-4">
+        <header className={cn("desktop-drag flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] px-4", !sidebarOpen && "desktop-lights-left")}>
           <button type="button" aria-label="Open sidebar" onClick={() => setDrawer(true)} className="rounded-md p-1 text-white/60 hover:text-foreground md:hidden">
             <Menu size={18} />
           </button>

@@ -77,3 +77,19 @@ body {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
+
+/* Inside the macOS app (set by electron/preload.ts): leave room for the
+   traffic lights and let the title areas drag the window. */
+html[data-desktop] .desktop-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+html[data-desktop] .desktop-drag :is(button, a, input, textarea, select, [role="switch"]) {
+  -webkit-app-region: no-drag;
+}
+html[data-desktop="mac"] .desktop-lights-pad {
+  padding-top: 44px;
+}
+html[data-desktop="mac"] .desktop-lights-left {
+  padding-left: 84px;
+}
