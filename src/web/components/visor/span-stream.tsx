@@ -94,7 +94,7 @@ function Card({ span, opts, children, defaultOpen = false, extra }: { span: Trac
 
 function Panel({ children, actions, label }: { children: ReactNode; actions?: ReactNode; label?: string }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-[#0d1117]">
+    <div className="overflow-hidden rounded-lg border border-border bg-code">
       <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-[11px] text-faint">
         <span className="truncate font-mono">{label}</span>
         <span className="ml-auto flex items-center gap-1">{actions}</span>

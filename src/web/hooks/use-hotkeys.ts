@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export type HotkeyMap = Partial<Record<"a" | "e" | "d" | "j" | "k" | "mod+k" | "escape" | "[" | "]", () => void>>;
+export type HotkeyMap = Partial<Record<"a" | "e" | "d" | "j" | "k" | "mod+k" | "mod+b" | "mod+." | "escape" | "[" | "]", () => void>>;
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
@@ -17,10 +17,16 @@ export function useHotkeys(map: HotkeyMap) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const m = ref.current;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        m["mod+k"]?.();
-        return;
+      if (e.metaKey || e.ctrlKey) {
+        const combo = `mod+${e.key.toLowerCase()}` as keyof HotkeyMap;
+        if (combo === "mod+k" || combo === "mod+b" || combo === "mod+.") {
+          const fn = m[combo];
+          if (fn) {
+            e.preventDefault();
+            fn();
+          }
+          return;
+        }
       }
       if (e.key === "Escape") return m.escape?.();
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;

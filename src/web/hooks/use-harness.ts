@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef } from "react";
 import { useSession, useTraceModel } from "@/stores/session-store";
 import { useUi } from "@/stores/ui-store";
 import { walkOrder } from "@/lib/trace-model";
-import { useHotkeys } from "./use-hotkeys";
+import { useHotkeys, type HotkeyMap } from "./use-hotkeys";
 
 /**
  * Everything a design needs from the harness: the live model, the selected
  * span, keyboard navigation (J/K, A/E/D, ⌘K) and an auto-started mock run
  * so every prototype streams the same scenario on open.
  */
-export function useHarness({ scrollIntoView = true }: { scrollIntoView?: boolean } = {}) {
+export function useHarness({ scrollIntoView = true, extraKeys = {} }: { scrollIntoView?: boolean; extraKeys?: HotkeyMap } = {}) {
   const model = useTraceModel();
   const { token, connection, sessionId, selectedSpanId, connect, start, resolve, select } = useSession();
   const ui = useUi();
@@ -40,6 +40,7 @@ export function useHarness({ scrollIntoView = true }: { scrollIntoView?: boolean
   };
 
   useHotkeys({
+    ...extraKeys,
     "mod+k": () => ui.setPalette(!ui.paletteOpen),
     escape: () => {
       ui.setPalette(false);

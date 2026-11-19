@@ -2,23 +2,32 @@
 
 /* PRD §2: quiet obsidian/zinc surfaces, hairline borders, color only for state. */
 :root {
-  --background: #090a0c;
-  --panel: #0f1115;
-  --card: #15181e;
-  --foreground: #ecedf0;
-  --muted-foreground: #9aa0ab;
-  --faint: #6b717d;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --primary: #ecedf0;
-  --primary-foreground: #0b0d12;
-  --ring: rgba(122, 162, 255, 0.5);
-  --emerald: #34d399;
-  --amber: #fbbf24;
-  --rose: #fb7185;
-  --violet: #a78bfa;
-  --indigo: #818cf8;
-  --radius: 10px;
+  /* Dark only (no light theme): Cursor-style neutral charcoal, hairline borders. */
+  color-scheme: dark;
+  --background: #181818;
+  --canvas: #181818; /* chat, like an editor area */
+  --sidebar: #141414; /* side bars sit a step darker */
+  --panel: #141414;
+  --card: #1f1f1f;
+  --popover: #202020;
+  --code: #1b1b1b;
+  --bubble: #262626;
+  --composer: #1f1f1f;
+  --foreground: #e4e4e4;
+  --muted-foreground: #a0a0a0;
+  --faint: #6f6f6f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --primary: #e4e4e4;
+  --primary-foreground: #141414;
+  --ring: rgba(76, 157, 243, 0.55);
+  /* Color is reserved for state (PRD §2) */
+  --emerald: #4fc38a;
+  --amber: #e2b340;
+  --rose: #f2706f;
+  --violet: #b392f0;
+  --indigo: #4c9df3; /* the accent: focus, links, tool calls */
+  --radius: 8px;
 }
 
 @theme inline {
@@ -38,9 +47,11 @@
   --color-rose: var(--rose);
   --color-violet: var(--violet);
   --color-indigo: var(--indigo);
+  --color-popover: var(--popover);
+  --color-code: var(--code);
   --radius-lg: var(--radius);
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono", monospace;
 }
 
 html,
@@ -50,7 +61,7 @@ body,
 }
 
 body {
-  font-feature-settings: "cv11", "ss01";
+  font-size: 13px;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -60,4 +71,9 @@ body {
 /* Every live number uses tabular figures so it never jitters */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }

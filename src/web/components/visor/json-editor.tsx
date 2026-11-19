@@ -8,23 +8,24 @@ import { basicSetup } from "codemirror";
 
 const theme = EditorView.theme(
   {
-    "&": { backgroundColor: "rgba(0,0,0,0.35)", color: "#e6edf3", fontSize: "12.5px", borderRadius: "8px" },
-    ".cm-content": { fontFamily: "var(--font-mono)", padding: "8px 0", caretColor: "#7aa2ff" },
-    ".cm-gutters": { backgroundColor: "transparent", color: "#6b717d", border: "none" },
+    "&": { backgroundColor: "var(--code)", color: "#d4d4d4", fontSize: "12.5px", borderRadius: "8px" },
+    ".cm-content": { fontFamily: "var(--font-mono)", padding: "8px 0", caretColor: "#aeafad" },
+    ".cm-gutters": { backgroundColor: "transparent", color: "#6e7681", border: "none" },
     ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "rgba(255,255,255,0.04)" },
-    "&.cm-focused": { outline: "1px solid rgba(122,162,255,0.45)" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(122,162,255,0.25) !important" },
-    ".cm-cursor": { borderLeftColor: "#7aa2ff" },
+    "&.cm-focused": { outline: "1px solid var(--ring)" },
+    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "#264f78 !important" },
+    ".cm-cursor": { borderLeftColor: "#aeafad" },
   },
   { dark: true },
 );
 
-// Same palette as the Shiki github-dark-default theme used everywhere else
+// Same palette as the Shiki dark-plus (VS Code Dark+) theme used everywhere else
 const highlight = HighlightStyle.define([
-  { tag: tags.propertyName, color: "#7ee787" },
-  { tag: tags.string, color: "#a5d6ff" },
-  { tag: [tags.number, tags.bool, tags.null], color: "#79c0ff" },
-  { tag: tags.punctuation, color: "#8b949e" },
+  { tag: tags.propertyName, color: "#9cdcfe" },
+  { tag: tags.string, color: "#ce9178" },
+  { tag: tags.number, color: "#b5cea8" },
+  { tag: [tags.bool, tags.null], color: "#569cd6" },
+  { tag: tags.punctuation, color: "#d4d4d4" },
 ]);
 
 /** Inline CodeMirror 6 JSON editor for "Edit JSON" overrides. */

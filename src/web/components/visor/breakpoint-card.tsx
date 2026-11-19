@@ -54,7 +54,7 @@ export function BreakpointCard({ paused, variant = "inline", showDiff = false }:
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 420, damping: 34 }}
       className={cn(
-        "rounded-xl border border-amber/30 bg-[#17140c] p-4",
+        "rounded-xl border border-amber/30 bg-[color-mix(in_srgb,var(--amber)_6%,var(--card))] p-4",
         variant === "dock" && "shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)] backdrop-blur-xl",
         variant === "banner" && "rounded-none border-x-0 border-t-0 bg-amber/[0.06]",
       )}
@@ -70,7 +70,7 @@ export function BreakpointCard({ paused, variant = "inline", showDiff = false }:
 
       <div className={cn("mt-3", showDiff && editing && "grid gap-3 lg:grid-cols-2")}>
         {(!editing || showDiff) && (
-          <div className="rounded-lg bg-black/35 px-3 py-2">
+          <div className="rounded-lg bg-code px-3 py-2">
             {showDiff && editing && <p className="mb-1 text-[11px] text-faint">Original</p>}
             <JsonView value={original} />
           </div>
@@ -92,7 +92,7 @@ export function BreakpointCard({ paused, variant = "inline", showDiff = false }:
               )}
             </div>
             {showDiff && changes.length > 0 && (
-              <div className="mt-2 space-y-1 rounded-lg bg-black/30 p-2 font-mono text-[11.5px]">
+              <div className="mt-2 space-y-1 rounded-lg bg-code p-2 font-mono text-[11.5px]">
                 {changes.map((c) => (
                   <div key={c.key}>
                     <span className="text-faint">{c.key}: </span>
@@ -117,7 +117,7 @@ export function BreakpointCard({ paused, variant = "inline", showDiff = false }:
             if (e.key === "Escape") setDenying(false);
           }}
           placeholder="Steering for Claude, e.g. “Push to a branch instead.” (Enter to send)"
-          className="mt-3 h-9 w-full rounded-lg border border-rose/30 bg-black/30 px-3 text-[13px] outline-none placeholder:text-faint focus:border-rose/60"
+          className="mt-3 h-9 w-full rounded-lg border border-rose/30 bg-code px-3 text-[13px] outline-none placeholder:text-faint focus:border-rose/60"
         />
       )}
 

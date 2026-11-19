@@ -14,15 +14,9 @@
 
 ## Status
 
-**Phase 2 (design gate) is ready for review.** Three clickable GUI prototypes stream the same live mock session from the local daemon:
+**Phase 2 is done: the official interface is chosen.** It's a calm, conversation-first harness: a gray source-list sidebar (sessions grouped by workspace folder, Overrides & rules, MCP servers, Credit ledger), a centered chat where each turn folds into "Thought for 6.5s · 7 steps · $0.09", a compact step list (`Read · path`, `Edit · path +3 −2`, nested subagents), file cards that open a **Review · turn N** diff panel, and a rounded composer with permission-mode, model + effort and budget-cap chips. A right-hand Inspector holds Context (7 categories + compaction), Payload, the micro-dollar Cost receipt, and a span Timeline with replay. Approve / Edit JSON / Deny breakpoints appear inline, with A/E/D, J/K and ⌘K shortcuts.
 
-| Route | Design | Idea |
-| --- | --- | --- |
-| `/preview/1` | Studio Tri-Pane | Sessions + MCP sidebar, live stream, tabbed inspector |
-| `/preview/2` | Linear Focus | Calm canvas, split diffs, floating override dock, slide-over inspector |
-| `/preview/3` | Mission Deck | Span waterfall, split draggable tabs, breakpoint banner, alert feed, replay |
-
-All three have live cost / cache / wallet counters, thinking accordions, Shiki diffs, nested subagents, the 7-category context breakdown, ⌘K, J/K span navigation, and Approve / Edit JSON (CodeMirror + Zod) / Deny with A/E/D. Phase 1 (daemon, SQLite, cost engine, breakpoints) is merged. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
+Next is Phase 3: wiring this GUI to the real Claude Agent SDK. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
 
 ## Run it locally
 
@@ -33,7 +27,7 @@ pnpm install
 pnpm dev
 ```
 
-Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`) and pick a design. Each one starts a mock session automatically. Everything runs on the mock runtime: no API key, no spend.
+Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`). A mock session starts automatically; type a prompt to start another. Everything runs on the mock runtime: no API key, no spend.
 
 | Command | What it does |
 | --- | --- |
