@@ -135,6 +135,17 @@ export const VisorEvent = z.discriminatedUnion("type", [
     at,
   }),
   z.object({
+    type: z.literal("alert"),
+    sessionId: id,
+    level: z.enum(["info", "warning", "danger"]),
+    title: z.string(),
+    detail: z.string(),
+    /** Which trigger or rule raised it. */
+    source: z.string(),
+    spanId: id.optional(),
+    at,
+  }),
+  z.object({
     type: z.literal("session.ended"),
     sessionId: id,
     status: z.enum(["completed", "aborted_budget", "error"]),

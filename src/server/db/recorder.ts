@@ -151,6 +151,9 @@ export class TraceRecorder {
         this.usage.set(e.turnId, ledger);
         break;
       }
+      case "alert":
+        // Kept in the raw event log only
+        break;
       case "span.delta":
         // Streamed text lives in the live stream; the final output is stored on span.ended.
         break;

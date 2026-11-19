@@ -3,6 +3,7 @@ import { VisorEvent, type OverrideDecision } from "@shared/events";
 import { BreakpointQueue } from "../interceptor/breakpoints";
 import { BudgetWatchdog } from "../interceptor/budget";
 import { PolicyEngine } from "../interceptor/policy";
+import { TriggerEngine, type TriggerAlert } from "../interceptor/triggers";
 import { UsageLedger } from "../telemetry/cost";
 import { PricingRegistry } from "../telemetry/pricing";
 import type { AgentRuntimeAdapter, RunOptions, ToolUseRequest, ToolUseVerdict } from "./adapter";
@@ -17,6 +18,8 @@ export type SessionRunnerDeps = {
   /** Validate every event against the zod schema (on in dev and tests). */
   validate?: boolean;
   now?: () => number;
+  /** `.visor.json` notification triggers. */
+  triggers?: TriggerEngine;
   /** Hard cap per turn (from .visor.json), on top of the session cap. */
   turnCapMicroUsd?: number | null;
 };
@@ -28,7 +31,8 @@ export type SessionRunnerDeps = {
  */
 export class SessionRunner {
   readonly breakpoints: BreakpointQueue;
-  private readonly policy: PolicyEngine;
+  readonly policy: PolicyEngine;
+  private readonly triggers: TriggerEngine;
   private readonly pricing: PricingRegistry;
   private readonly listeners = new Set<Listener>();
   private readonly controllers = new Map<string, AbortController>();
@@ -38,6 +42,7 @@ export class SessionRunner {
   constructor(private readonly deps: SessionRunnerDeps) {
     this.breakpoints = deps.breakpoints ?? new BreakpointQueue();
     this.policy = deps.policy ?? new PolicyEngine();
+    this.triggers = deps.triggers ?? new TriggerEngine();
     this.pricing = deps.pricing ?? new PricingRegistry();
     this.now = deps.now ?? Date.now;
   }
@@ -87,6 +92,9 @@ export class SessionRunner {
     const spent = () => spend.cost(priceOf).total;
     const turnSpent = () => turnSpend.cost(priceOf).total;
 
+    const alert = (a: TriggerAlert, spanId?: string) =>
+      this.emit({ type: "alert", sessionId, level: a.level, title: a.title, detail: a.detail, source: a.trigger, spanId, at: this.now() });
+
     const abortForBudget = () => {
       if (controller.signal.aborted) return;
       controller.abort("budget");
@@ -99,8 +107,11 @@ export class SessionRunner {
         abortForBudget();
         return { decision: "denied", note: "Budget cap reached" };
       }
-      // 2. Policy rules (built-in protections first)
-      const verdict = this.policy.evaluate({ toolName: req.toolName, input: req.input });
+      // 2. Notification triggers: alerts, and path blocks
+      const fired = this.triggers.onToolCall(req.toolName, req.input);
+      fired.alerts.forEach((a) => alert(a, req.spanId));
+      // 3. Policy rules (built-in protections first), unless a trigger already blocked it
+      const verdict = fired.block ? ({ action: "block", rule: fired.block } as const) : this.policy.evaluate({ toolName: req.toolName, input: req.input });
       if (verdict.action === "allow") return { decision: "approved", input: req.input };
       if (verdict.action === "block") {
         this.emit({
@@ -116,7 +127,7 @@ export class SessionRunner {
         });
         return { decision: "auto_blocked", rule: verdict.rule };
       }
-      // 3. Breakpoint: freeze the call until the operator decides
+      // 4. Breakpoint: freeze the call until the operator decides
       this.emit({
         type: "breakpoint.paused",
         sessionId,
@@ -146,12 +157,14 @@ export class SessionRunner {
     try {
       for await (const event of this.deps.adapter.run(options, { onToolUse, signal: controller.signal })) {
         if (event.type === "turn.started") turnSpend = new UsageLedger();
+        let fresh = false;
         if (event.type === "usage") {
-          spend.add(event.messageId, event.modelId, event.usage);
+          fresh = spend.add(event.messageId, event.modelId, event.usage);
           turnSpend.add(event.messageId, event.modelId, event.usage);
           if (watchdog.check(spent(), turnSpent()).status === "exceeded") abortForBudget();
         }
         this.emit(event);
+        if (event.type === "usage" && fresh) this.triggers.onUsage(event.usage).forEach((a) => alert(a, event.spanId));
       }
     } catch (err) {
       this.emit({ type: "session.ended", sessionId, status: "error", totalCostMicroUsd: spent(), at: this.now() });
