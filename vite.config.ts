@@ -12,6 +12,7 @@ export default defineConfig({
     alias: {
       "@": r("./src/web"),
       "@shared": r("./src/shared"),
+      "@server": r("./src/server"),
     },
   },
   server: {
