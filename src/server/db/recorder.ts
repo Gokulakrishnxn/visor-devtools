@@ -3,7 +3,7 @@ import { ulid } from "ulid";
 import type { VisorEvent } from "@shared/events";
 import { UsageLedger } from "../telemetry/cost";
 import type { VisorDb } from "./client";
-import { policyAuditLog, sessions, spans, turns } from "./schema";
+import { policyAuditLog, sessionEvents, sessions, spans, turns } from "./schema";
 
 const json = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
 
@@ -17,6 +17,9 @@ export class TraceRecorder {
   /** Per-turn token totals, de-duplicated by message ID. */
   private readonly usage = new Map<string, UsageLedger>();
 
+  /** Next sequence number per session for the raw event log. */
+  private readonly seq = new Map<string, number>();
+
   constructor(private readonly db: VisorDb) {}
 
   private inputOf(spanId: string): unknown {
@@ -25,6 +28,15 @@ export class TraceRecorder {
   }
 
   record(e: VisorEvent): void {
+    this.project(e);
+    // session.started inserts the session row the event log references
+    const n = this.seq.get(e.sessionId) ?? 0;
+    this.seq.set(e.sessionId, n + 1);
+    this.db.insert(sessionEvents).values({ sessionId: e.sessionId, seq: n, type: e.type, eventJson: JSON.stringify(e), at: e.at }).run();
+    if (e.type === "session.ended") this.seq.delete(e.sessionId);
+  }
+
+  private project(e: VisorEvent): void {
     switch (e.type) {
       case "session.started":
         this.db
