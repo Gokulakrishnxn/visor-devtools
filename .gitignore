@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+out/
+dist/
+release/
+*.tsbuildinfo
+next-env.d.ts
+
+# env & secrets
+.env
+.env*.local
+
+# local databases
+*.db
+*.db-wal
+*.db-shm
+
+# misc
+.DS_Store
+*.log
+.vercel
