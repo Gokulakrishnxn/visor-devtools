@@ -17,6 +17,9 @@
   --rose: #fb7185;
   --violet: #a78bfa;
   --clay: #d97757;
+  /* shadcn/ui names, used by registry components */
+  --foreground: var(--fg);
+  --background: var(--bg);
 }
 
 @theme inline {
@@ -35,6 +38,8 @@
   --color-rose: var(--rose);
   --color-violet: var(--violet);
   --color-clay: var(--clay);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-display: var(--font-display), var(--font-geist-sans), sans-serif;
@@ -91,4 +96,83 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Docs prose (Mintlify-like rhythm) */
+.docs-prose {
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1.75;
+}
+.docs-prose > p,
+.docs-prose li > p {
+  margin: 1.1em 0;
+}
+.docs-prose h2 {
+  margin: 2.4em 0 0.6em;
+  color: var(--fg);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.docs-prose h3 {
+  margin: 1.8em 0 0.4em;
+  color: var(--fg);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.docs-prose strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.docs-prose a:not([class]) {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 4px;
+}
+.docs-prose ul,
+.docs-prose ol:not(.not-prose) {
+  margin: 1em 0;
+  padding-left: 1.4em;
+}
+.docs-prose ul { list-style: disc; }
+.docs-prose ol:not(.not-prose) { list-style: decimal; }
+.docs-prose li { margin: 0.35em 0; }
+.docs-prose li::marker { color: var(--fg-faint); }
+.docs-prose :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+.docs-prose table {
+  display: block;
+  width: 100%;
+  margin: 1.5em 0;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.docs-prose th {
+  color: var(--fg);
+  font-weight: 600;
+  text-align: left;
+}
+.docs-prose th,
+.docs-prose td {
+  padding: 0.6em 0.9em;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.docs-prose blockquote {
+  margin: 1.5em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--line-strong);
+}
+.docs-prose hr {
+  margin: 2.5em 0;
+  border-color: var(--line);
 }
