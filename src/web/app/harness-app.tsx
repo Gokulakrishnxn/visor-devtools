@@ -38,6 +38,9 @@ export function HarnessApp() {
   });
   const { model } = h;
   const stop = useSession((s) => s.stop);
+  const info = useSession((s) => s.info);
+  const clearSession = useSession((s) => s.clear);
+  const live = info?.runtime === "claude";
   const [view, setView] = useState<SidebarView>("chat");
   // Closed by default for a calm canvas; steps, file cards and the toolbar open it
   const [panel, setPanel] = useState<RightPanel>(null);
@@ -87,7 +90,13 @@ export function HarnessApp() {
       onCollapse={drawer ? () => setDrawer(false) : () => (setSidebarOpen(false), setRestore(null))}
       view={view}
       onView={(v) => (setView(v), setDrawer(false))}
-      onNew={() => (setView("chat"), setDrawer(false), void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort }))}
+      onNew={() => {
+        setView("chat");
+        setDrawer(false);
+        // Live: an empty session waits for your prompt; mock: replay the demo
+        if (live) clearSession();
+        else void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort });
+      }}
       onSearch={() => h.ui.setPalette(true)}
     />
   );
@@ -175,7 +184,22 @@ export function HarnessApp() {
           <div className={cn("mx-auto px-5 pb-10 pt-8 transition-[max-width] duration-300 sm:px-8", full ? "max-w-[1040px]" : "max-w-[820px]")}>
             {view === "chat" && (
               <>
-                {model.turns.length === 0 && <p className="pt-24 text-center text-[15px] text-white/40">Connecting to the local harness…</p>}
+                {model.turns.length === 0 && h.sessionId && (
+                  <div className="pt-24 text-center text-[14px] text-white/45">
+                    This session was recorded before V.I.S.O.R. stored replays, so there's nothing to show. New sessions replay in full.
+                  </div>
+                )}
+                {model.turns.length === 0 && !h.sessionId && (
+                  <div className="pt-24 text-center">
+                    <p className="text-[22px] font-medium text-foreground/90">{h.connection === "open" ? "What should Claude work on?" : "Connecting to the local harness…"}</p>
+                    {h.connection === "open" && (
+                      <p className="mt-2 text-[13.5px] text-white/45">
+                        {live ? "Live mode: every prompt runs the real Claude Agent SDK in " : "Mock mode: a free demo run. Start the daemon with --live for real runs in "}
+                        <span className="font-mono text-white/60">{info?.workspacePath}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Conversation model={model} selectedId={h.selectedSpanId} onSelect={selectSpan} onReview={openReview} />
               </>
             )}
@@ -194,7 +218,10 @@ export function HarnessApp() {
               onStop={() => void stop()}
               onSend={(prompt) => void h.start({ prompt, capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort })}
             />
-            <p className="mt-2 text-center text-[11.5px] text-white/30">Mock runtime · $0 API spend · J/K steps · A/E/D decide</p>
+            <p className="mt-2 text-center text-[11.5px] text-white/30">
+              {live ? <span className="text-amber/80">Live · Claude Agent SDK · spends real money</span> : "Mock runtime · $0 API spend"}
+              {info?.configError && <span className="text-rose/80"> · .visor.json is invalid, using defaults</span>} · J/K steps · A/E/D decide
+            </p>
           </div>
         )}
       </main>

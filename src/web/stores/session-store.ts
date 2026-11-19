@@ -5,6 +5,9 @@ import { deriveTrace, type TraceModel } from "@/lib/trace-model";
 
 type Connection = "idle" | "connecting" | "open" | "closed";
 
+export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number };
+export type StoredSession = { id: string; title: string; workspacePath: string; modelId: string; status: string; totalCostMicroUsd: number; startedAt: number; endedAt: number | null };
+
 type SessionState = {
   token: string;
   connection: Connection;
@@ -15,11 +18,18 @@ type SessionState = {
   cursor: number | null;
   selectedSpanId: string | null;
   error: string | null;
+  info: DaemonInfo | null;
+  sessions: StoredSession[];
   connect: () => void;
+  refreshSessions: () => Promise<void>;
+  /** Open a stored session: its events load from SQLite and replay instantly. */
+  open: (sessionId: string) => Promise<void>;
   start: (opts?: { prompt?: string; capUsd?: string; modelId?: string; effort?: "low" | "medium" | "high" }) => Promise<void>;
   resolve: (decision: OverrideDecision) => Promise<void>;
   stop: () => Promise<void>;
   select: (spanId: string | null) => void;
+  /** Leave the current session (a fresh, empty chat). */
+  clear: () => void;
   setCursor: (n: number | null) => void;
 };
 
@@ -50,6 +60,8 @@ export const useSession = create<SessionState>((set, get) => ({
   cursor: null,
   selectedSpanId: null,
   error: null,
+  info: null,
+  sessions: [],
 
   connect() {
     const { token, connection } = get();
@@ -57,7 +69,11 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ connection: "connecting" });
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-    ws.onopen = () => set({ connection: "open", error: null });
+    ws.onopen = () => {
+      set({ connection: "open", error: null });
+      void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
+      void get().refreshSessions();
+    };
     ws.onclose = () => {
       set({ connection: "closed" });
       setTimeout(() => get().connect(), 1500);
@@ -67,7 +83,26 @@ export const useSession = create<SessionState>((set, get) => ({
       if (!parsed.success) return;
       const e = parsed.data;
       set((s) => ({ bySession: { ...s.bySession, [e.sessionId]: [...(s.bySession[e.sessionId] ?? []), e] } }));
+      if (e.type === "session.started" || e.type === "session.ended") void get().refreshSessions();
     };
+  },
+
+  async refreshSessions() {
+    try {
+      const { sessions } = await api<{ sessions: StoredSession[] }>(get().token, "/api/sessions");
+      set({ sessions });
+    } catch {
+      // the list is a convenience; the live stream keeps working without it
+    }
+  },
+
+  async open(sessionId) {
+    if (!get().bySession[sessionId]?.length) {
+      const { events } = await api<{ events: VisorEvent[] }>(get().token, `/api/sessions/${sessionId}/events`);
+      const parsed = events.map((e) => VisorEvent.safeParse(e)).flatMap((r) => (r.success ? [r.data] : []));
+      set((s) => ({ bySession: { ...s.bySession, [sessionId]: parsed } }));
+    }
+    set({ sessionId, cursor: null, selectedSpanId: null });
   },
 
   async start(opts = {}) {
@@ -95,6 +130,7 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   select: (spanId) => set({ selectedSpanId: spanId }),
+  clear: () => set({ sessionId: null, cursor: null, selectedSpanId: null }),
   setCursor: (n) => set({ cursor: n }),
 }));
 

@@ -11,17 +11,18 @@ import { useHotkeys, type HotkeyMap } from "./use-hotkeys";
  */
 export function useHarness({ scrollIntoView = true, extraKeys = {} }: { scrollIntoView?: boolean; extraKeys?: HotkeyMap } = {}) {
   const model = useTraceModel();
-  const { token, connection, sessionId, selectedSpanId, connect, start, resolve, select } = useSession();
+  const { token, connection, sessionId, selectedSpanId, connect, start, resolve, select, info } = useSession();
   const ui = useUi();
   const started = useRef(false);
 
   useEffect(() => connect(), [connect]);
   useEffect(() => {
-    if (connection === "open" && !sessionId && !started.current) {
+    // Only the free mock demo starts itself; a live run waits for a typed prompt
+    if (connection === "open" && info?.runtime === "mock" && !sessionId && !started.current) {
       started.current = true;
       void start();
     }
-  }, [connection, sessionId, start]);
+  }, [connection, sessionId, start, info]);
 
   const focus = useCallback(
     (spanId: string) => {
@@ -53,5 +54,5 @@ export function useHarness({ scrollIntoView = true, extraKeys = {} }: { scrollIn
     d: () => model.paused && ui.setDenying(true),
   });
 
-  return { model, token, connection, selectedSpanId, select: focus, start, ui };
+  return { model, token, connection, sessionId, selectedSpanId, select: focus, start, ui };
 }

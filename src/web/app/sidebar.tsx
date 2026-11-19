@@ -1,14 +1,28 @@
 import { useState } from "react";
 import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
-import { PAST_SESSIONS, WALLET_BEFORE_MICRO, WORKSPACE } from "@/lib/mock-data";
+import { WALLET_BEFORE_MICRO } from "@/lib/mock-data";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
+import { useSession, type StoredSession } from "@/stores/session-store";
 
-const OTHER_FOLDERS = [
-  { name: "visor-devtools", sessions: ["Pricing registry overrides", "Docs search palette"] },
-  { name: "data-pipeline", sessions: ["Backfill November events"] },
-];
+const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+function ago(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86_400)}d`;
+}
+
+const STATUS_DOT: Record<string, string> = {
+  running: "bg-indigo animate-pulse",
+  paused: "bg-amber animate-pulse",
+  completed: "bg-emerald",
+  aborted_budget: "bg-rose",
+  error: "bg-rose",
+};
 
 export type SidebarView = "chat" | "rules" | "mcp" | "ledger";
 
@@ -36,9 +50,20 @@ export function Sidebar({
   onView: (v: SidebarView) => void;
   className?: string;
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({ [WORKSPACE.name]: true });
-  const status = model.session?.status;
-  const liveDot = status === "paused" ? "bg-amber animate-pulse" : status === "running" ? "bg-indigo animate-pulse" : "bg-emerald";
+  const stored = useSession((s) => s.sessions);
+  const currentId = useSession((s) => s.sessionId);
+  const openSession = useSession((s) => s.open);
+  const info = useSession((s) => s.info);
+  const here = folderOf(info?.workspacePath ?? "workspace");
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const isOpen = (name: string) => open[name] ?? name === here;
+
+  // Sessions grouped by workspace folder, this workspace first
+  const groups = new Map<string, StoredSession[]>([[here, []]]);
+  for (const s of stored) {
+    const name = folderOf(s.workspacePath);
+    groups.set(name, [...(groups.get(name) ?? []), s]);
+  }
 
   const nav = [
     { id: "rules" as const, label: "Overrides & rules", icon: ShieldCheck },
@@ -102,17 +127,25 @@ export function Sidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        <Folder2 name={WORKSPACE.name} open={open[WORKSPACE.name] ?? false} onToggle={() => setOpen((o) => ({ ...o, [WORKSPACE.name]: !o[WORKSPACE.name] }))}>
-          <SessionRow active onClick={() => onView("chat")} title={model.session?.title ?? "Starting…"} dot={liveDot} />
-          {PAST_SESSIONS.map((s) => (
-            <SessionRow key={s.id} title={s.title} />
-          ))}
-        </Folder2>
-        {OTHER_FOLDERS.map((f) => (
-          <Folder2 key={f.name} name={f.name} open={open[f.name] ?? false} onToggle={() => setOpen((o) => ({ ...o, [f.name]: !o[f.name] }))}>
-            {f.sessions.map((s) => (
-              <SessionRow key={s} title={s} />
-            ))}
+        {[...groups.entries()].map(([name, list]) => (
+          <Folder2 key={name} name={name} open={isOpen(name)} onToggle={() => setOpen((o) => ({ ...o, [name]: !isOpen(name) }))}>
+            {list.length === 0 && <p className="py-1.5 pl-9 text-[12.5px] text-white/35">No sessions yet</p>}
+            {list.map((s) => {
+              const live = s.id === currentId ? model.session?.status : undefined;
+              return (
+                <SessionRow
+                  key={s.id}
+                  active={s.id === currentId}
+                  title={s.id === currentId && model.session ? model.session.title : s.title}
+                  dot={STATUS_DOT[live ?? s.status]}
+                  meta={ago(s.startedAt)}
+                  onClick={() => {
+                    onView("chat");
+                    void openSession(s.id);
+                  }}
+                />
+              );
+            })}
           </Folder2>
         ))}
       </div>
@@ -122,7 +155,9 @@ export function Sidebar({
           <Wallet size={15} />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block text-[13px] text-foreground">Local harness</span>
+          <span className="block text-[13px] text-foreground">
+            {info?.runtime === "claude" ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}
+          </span>
           <span className="block text-[11.5px] text-white/50">
             <Usd micro={WALLET_BEFORE_MICRO - model.cost.total} decimals={2} /> credit left
           </span>
@@ -146,7 +181,7 @@ function Folder2({ name, open, onToggle, children }: { name: string; open: boole
   );
 }
 
-function SessionRow({ title, active, dot, onClick }: { title: string; active?: boolean; dot?: string; onClick?: () => void }) {
+function SessionRow({ title, active, dot, meta, onClick }: { title: string; active?: boolean; dot?: string; meta?: string; onClick?: () => void }) {
   return (
     <button
       type="button"
@@ -157,7 +192,8 @@ function SessionRow({ title, active, dot, onClick }: { title: string; active?: b
       )}
     >
       <span className="truncate">{title}</span>
-      {dot && <i className={cn("ml-auto size-1.5 shrink-0 rounded-full", dot)} />}
+      {meta && <span className="ml-auto shrink-0 text-[11px] text-white/30 tabular">{meta}</span>}
+      {dot && <i className={cn("size-1.5 shrink-0 rounded-full", !meta && "ml-auto", dot)} />}
     </button>
   );
 }
