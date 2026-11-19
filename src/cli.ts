@@ -19,6 +19,7 @@ Usage
 Options
   --port <n>            Daemon port (default ${DEFAULT_PORT}, always 127.0.0.1)
   --cap <usd>           Hard session budget, e.g. --cap 5
+  --live                Run the real Claude Agent SDK (spends money; needs credentials)
   --no-open             Don't open a browser window
   -v, --version         Print the version
   -h, --help            Show this help
@@ -36,6 +37,7 @@ async function main() {
     options: {
       port: { type: "string" },
       cap: { type: "string" },
+      live: { type: "boolean", default: false },
       open: { type: "boolean", default: true },
       "no-open": { type: "boolean" },
       version: { type: "boolean", short: "v" },
@@ -54,11 +56,12 @@ async function main() {
   const cap = values.cap ? parseUsd(values.cap) : null;
   const here = dirname(fileURLToPath(import.meta.url));
   const staticDir = [join(here, "web"), join(here, "../dist/web")].find((d) => existsSync(join(d, "index.html")));
-  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir });
+  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir, runtime: values.live ? "claude" : undefined });
   const url = `${daemon.url}/?token=${daemon.token}${cap !== null ? `&cap=${cap}` : ""}`;
 
   console.log(`\n  V.I.S.O.R. ${VERSION} running at ${daemon.url}`);
   console.log(`  Workspace: ${process.cwd()}`);
+  console.log(`  Runtime:   ${daemon.runtime === "claude" ? "LIVE Claude Agent SDK (spends real money)" : "mock (zero API spend; add --live for real runs)"}`);
   console.log(staticDir ? `  GUI: ${url}\n` : "  GUI not built yet: run `pnpm build` first.\n");
   if (staticDir && values.open && !values["no-open"]) openBrowser(url);
 

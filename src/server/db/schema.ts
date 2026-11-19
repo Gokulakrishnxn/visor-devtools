@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // PRD §4.2. IDs are ULIDs, money is integer micro-dollars, times are epoch ms.
 
@@ -103,3 +103,21 @@ export const policyAuditLog = sqliteTable("policy_audit_log", {
   operatorNote: text("operator_note"),
   createdAt: integer("created_at").notNull(),
 });
+
+/**
+ * The raw VisorEvent stream, append-only, so any past session replays
+ * exactly as it streamed (the tables above are its queryable projection).
+ */
+export const sessionEvents = sqliteTable(
+  "session_events",
+  {
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    type: text("type").notNull(),
+    eventJson: text("event_json").notNull(),
+    at: integer("at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.seq] })],
+);

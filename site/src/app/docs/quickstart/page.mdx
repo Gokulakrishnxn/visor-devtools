@@ -36,6 +36,16 @@ The packaged `npx visor-devtools` command arrives in Phase 3. Until then, run V.
   </Step>
 </Steps>
 
+## Run against real Claude
+
+Mock mode is the default and costs nothing. When you're ready for real runs, opt in and set a cap:
+
+```bash
+VISOR_RUNTIME=claude pnpm dev
+```
+
+<Warning>Live mode spends real money on your Anthropic account. Every tool call still passes through V.I.S.O.R.'s rules and pause cards first.</Warning>
+
 ## Once it ships
 
 <Tabs>

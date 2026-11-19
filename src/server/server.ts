@@ -8,6 +8,9 @@ import { createApp, requireToken } from "./app";
 import { openDatabase } from "./db/client";
 import { TraceRecorder } from "./db/recorder";
 import { MockRuntimeAdapter } from "./runtime/mock-adapter";
+import { ClaudeSdkAdapter } from "./runtime/claude-sdk-adapter";
+import { TraceStore } from "./db/queries";
+import { loadConfig, resolveRuntime, type RuntimeKind } from "./config";
 import { SessionRunner } from "./runtime/session-runner";
 import { PolicyEngine } from "./interceptor/policy";
 import { PricingRegistry } from "./telemetry/pricing";
@@ -25,9 +28,11 @@ export type StartOptions = {
   staticDir?: string;
   /** Mock speed multiplier: 1 is real time. */
   mockSpeed?: number;
+  /** "claude" runs the real Agent SDK (spends money); default "mock". */
+  runtime?: RuntimeKind;
 };
 
-export type RunningDaemon = { server: ServerType; url: string; token: string; runner: SessionRunner; close: () => Promise<void> };
+export type RunningDaemon = { server: ServerType; url: string; token: string; runner: SessionRunner; runtime: RuntimeKind; close: () => Promise<void> };
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -43,10 +48,17 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const token = opts.token ?? randomBytes(24).toString("base64url");
   const port = opts.port ?? DEFAULT_PORT;
   const pricing = PricingRegistry.load();
-  // Phase 1 & 2: every run uses the zero-cost mock runtime.
+  const workspacePath = opts.workspacePath ?? process.cwd();
+  const { config, path: configPath, error: configError } = loadConfig(workspacePath);
+  if (configError) console.error(`[visor] .visor.json is invalid, using defaults: ${configError}`);
+  const runtime = opts.runtime ?? resolveRuntime();
+  const adapter =
+    runtime === "claude"
+      ? new ClaudeSdkAdapter({ pricing, mcpServers: config.mcpServers as never })
+      : new MockRuntimeAdapter({ speed: opts.mockSpeed ?? 1, pricing });
   const runner = new SessionRunner({
-    adapter: new MockRuntimeAdapter({ speed: opts.mockSpeed ?? 1, pricing }),
-    policy: new PolicyEngine(),
+    adapter,
+    policy: new PolicyEngine(config.breakpoints),
     pricing,
     validate: true,
   });
@@ -55,7 +67,15 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const recorder = new TraceRecorder(db);
   runner.subscribe((e) => recorder.record(e));
 
-  const app = createApp({ runner, token, workspacePath: opts.workspacePath ?? process.cwd() });
+  const app = createApp({
+    runner,
+    token,
+    workspacePath,
+    defaultModel: config.model,
+    defaultEffort: config.effort,
+    store: new TraceStore(db),
+    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), rules: config.breakpoints.length },
+  });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
   // Live VisorEvent stream. Clients authenticate with ?token= (browsers can't set WS headers).
@@ -93,6 +113,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     url: `http://${HOST}:${port}`,
     token,
     runner,
+    runtime,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => {

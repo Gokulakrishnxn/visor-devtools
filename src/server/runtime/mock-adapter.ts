@@ -63,7 +63,7 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
     yield {
       type: "session.started",
       sessionId,
-      title: options.title ?? sc.title,
+      title: options.title ?? (options.prompt ? options.prompt.slice(0, 60) : sc.title),
       workspacePath: options.workspacePath,
       modelId,
       effort: options.effort,
