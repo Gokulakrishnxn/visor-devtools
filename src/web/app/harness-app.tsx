@@ -225,10 +225,7 @@ export function HarnessApp() {
               onSend={(prompt) => void h.start({ prompt, capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort })}
             />
             {startError && <p className="mt-2 text-center text-[12.5px] text-rose">{startError}</p>}
-            <p className="mt-2 text-center text-[11.5px] text-white/30">
-              {live ? <span className="text-amber/80">Live · Claude Agent SDK · spends real money</span> : "Mock runtime · $0 API spend"}
-              {info?.configError && <span className="text-rose/80"> · .visor.json is invalid, using defaults</span>} · J/K steps · A/E/D decide
-            </p>
+            {info?.configError && <p className="mt-2 text-center text-[11.5px] text-rose/80">.visor.json is invalid, using defaults</p>}
           </div>
         )}
       </main>
