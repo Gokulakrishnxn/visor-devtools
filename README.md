@@ -2,46 +2,49 @@
 
 **V.I.S.O.R.** (Verified Inspection, Spans, Overrides & Runtime) — A CLI harness and live debugger for Claude with span-level tracing, mid-flight overrides, and real-money cost control.
 
-> X-ray vision for AI coding agents. See every thinking step and tool call live, pause or edit risky actions before they run, and track the exact tokens and dollars spent on every prompt.
+> X-ray vision for AI coding agents. See every thinking step and tool call live, pause or edit risky actions before they run, and track the exact tokens and dollars behind every prompt. 100% local: nothing leaves your machine except your own calls to Claude.
 
-| Letter | Pillar | What it means |
+![A run paused on a force-push, waiting for Approve / Edit JSON / Deny](docs/screenshots/paused.png)
+
+| Letter | Pillar | What you get |
 | --- | --- | --- |
-| **V** | Verified | Exact token counts, prompt-cache savings and real USD cost per prompt — no estimates. |
-| **I** | Inspection | Live reasoning blocks, context-window usage and raw tool inputs/outputs as they happen. |
-| **S** | Spans | Every prompt becomes a nested tree of timed spans: model calls, MCP tools, subagents. |
-| **O** | Overrides | Freeze the agent mid-flight, edit tool JSON before it runs, enforce hard budget caps. |
-| **R** | Runtime | The harness itself drives the agent loop, tool execution and guardrails. |
+| **V** | Verified | Exact token counts per bucket, prompt-cache savings and real USD in integer micro-dollars, reconciled against the SDK's own total. A prepaid credit wallet with a CSV ledger. |
+| **I** | Inspection | Live thinking, a compact step list, Shiki-highlighted reads and diffs, MCP payloads, the real 7-category context breakdown, and ⌘K search across every session. |
+| **S** | Spans | Every prompt as a nested tree of timed spans (model calls, tools, subagents) with per-agent totals and a waterfall with replay. |
+| **O** | Overrides | Freeze a tool call mid-flight: Approve, Edit JSON (validated), or Deny with steering. Built-in protections, pause switches, `.visor.json` rules and triggers, hard budget caps, and an audit log. |
+| **R** | Runtime | The harness drives the Claude Agent SDK itself, on your machine, as a macOS app or from the terminal. |
 
-## Status
-
-**Phase 2 is done: the official interface is chosen.** It's a calm, conversation-first harness: a gray source-list sidebar (sessions grouped by workspace folder, Overrides & rules, MCP servers, Credit ledger), a centered chat where each turn folds into "Thought for 6.5s · 7 steps · $0.09", a compact step list (`Read · path`, `Edit · path +3 −2`, nested subagents), file cards that open a **Review · turn N** diff panel, and a rounded composer with permission-mode, model + effort and budget-cap chips. A right-hand Inspector holds Context (7 categories + compaction), Payload, the micro-dollar Cost receipt, and a span Timeline with replay. Approve / Edit JSON / Deny breakpoints appear inline, with A/E/D, J/K and ⌘K shortcuts.
-
-Next is Phase 3: wiring this GUI to the real Claude Agent SDK. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
-
-## Run it locally
+## Quick start
 
 You need Node.js 20.19+ and pnpm.
 
 ```bash
-pnpm install
-pnpm dev
+pnpm install && pnpm dev
 ```
 
-Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`). A mock session starts automatically; type a prompt to start another. Everything runs on the mock runtime: no API key, no spend.
+Open the link it prints (`http://127.0.0.1:5173/?token=…`). A free mock session starts by itself: no API key, no spend.
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Daemon on `127.0.0.1:4310` + GUI on `:5173` |
-| `pnpm test` | Unit and integration tests (Vitest, mock runtime only) |
-| `pnpm typecheck` / `pnpm lint` | Strict TypeScript and ESLint |
-| `pnpm build` | GUI bundle (`dist/web`) + `vhud` CLI (`dist/cli.js`) |
-| `node dist/cli.js` | What `npx visor-devtools` will run |
-| `node dist/cli.js doctor` | Checks API key, `~/.visor` permissions, SQLite WAL |
-| `pnpm site:dev` | The landing page and docs at `:3000` |
+### The macOS app
+
+```bash
+pnpm desktop     # build and open the app
+pnpm dist:mac    # build .dmg files for Apple Silicon and Intel (release/dist)
+```
+
+The app runs the same local daemon in-process on a private port, with a native dark title bar and native notifications. **File → Open Folder** picks the workspace; **Runtime → Live** switches to real Claude after a confirmation. The app is `VISOR.app` (shown as V.I.S.O.R.). Builds are unsigned, so the first launch needs right-click → Open; the *macOS app* GitHub workflow builds the `.dmg` files on demand.
+
+### From the terminal
+
+```bash
+pnpm build
+node dist/cli.js                 # what `npx visor-devtools` / `vhud` will run
+node dist/cli.js --live --cap 5  # real Claude, hard $5.00 cap
+node dist/cli.js doctor          # API key, ~/.visor permissions, SQLite, .visor.json, MCP servers
+```
 
 Set `VISOR_DB=/some/path/traces.db` to keep traces somewhere other than `~/.visor/`.
 
-### Live runs (real Claude, real money)
+## Live runs (real Claude, real money)
 
 By default everything runs on the free mock runtime. To drive the real **Claude Agent SDK**, opt in explicitly:
 
@@ -57,6 +60,9 @@ You need Claude credentials (`ANTHROPIC_API_KEY`, or a profile from `ant auth lo
 - The session's cost is reconciled against the SDK's `total_cost_usd`.
 - `.visor.json` in the workspace adds your own rules, default model / effort / budget, and MCP servers.
 - Nothing starts on its own; a run begins when you send a prompt.
+
+## Features
+
 - **Prepaid credit:** open the wallet (bottom of the sidebar) to add credit or set a balance. Once credit is set, a live run's cap shrinks to what's left, and a run is refused at $0. Each live session is debited when it ends; any difference from the SDK's `total_cost_usd` is booked as a visible adjustment. Export the ledger as CSV any time. Mock runs never use credit.
 - **Pause switches:** in *Overrides & rules* (or the composer's permission chip) pause before every shell command, file edit, or MCP write. Secrets stay blocked and destructive commands still pause either way. `.visor.json` `pause` sets their defaults.
 - **Triggers:** `.visor.json` `triggers` raise alerts or block by regex on file paths, commands and URLs, and warn when one call sends more than N prompt tokens. Alerts show under the step that caused them, and as desktop notifications if you turn those on.
@@ -65,6 +71,56 @@ You need Claude credentials (`ANTHROPIC_API_KEY`, or a profile from `ant auth lo
 - **Search everything:** ⌘K searches every saved session (file paths, thinking, outputs, errors, prompts) and jumps straight to the step.
 - **Audit log:** every Approve / Edit JSON / Deny / auto-block is recorded with the original and final payload and your note, across sessions.
 - **Caps in `.visor.json`:** `budget.sessionCapUsd` is the default cap, `budget.turnCapUsd` stops any single turn that goes over.
+
+![Review panel with a Shiki diff of the edit](docs/screenshots/review.png)
+
+## Configuration: `.visor.json`
+
+Put it in the workspace root (see [`.visor.example.json`](.visor.example.json)):
+
+```json
+{
+  "model": "claude-opus-5-5",
+  "effort": "medium",
+  "budget": { "sessionCapUsd": "5", "turnCapUsd": "1" },
+  "pause": { "bash": false, "edits": false, "mcpWrites": true },
+  "breakpoints": [{ "rule": "schema-change", "tool": "Edit", "path": "src/server/db/**", "action": "pause" }],
+  "triggers": [
+    { "type": "path", "pattern": "\\.env|id_rsa", "action": "block" },
+    { "type": "tokens", "above": 200000 }
+  ],
+  "mcpServers": { "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] } }
+}
+```
+
+![Inspector cost receipt and per-agent totals](docs/screenshots/inspector.png)
+
+## Architecture
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ 1  GUI (React 19 · Tailwind v4 · Shiki · CodeMirror · cmdk)       │
+│    browser at :5173, or the Electron app (electron/)              │
+└───────────▲──────────────────────────────────────┬───────────────┘
+            │ WebSocket: VisorEvent stream         │ REST: start, decide, wallet
+┌───────────┴──────────────────────────────────────▼───────────────┐
+│ 2  Daemon (Hono on 127.0.0.1, per-launch token)                   │
+│    triggers → policy → breakpoint queue → budget + credit watchdog│
+└───────────▲──────────────────────────────────────┬───────────────┘
+            │ PreToolUse hook                      │ allow / edited input / deny
+┌───────────┴──────────────────────────────────────▼───────────────┐
+│ 3  Runtime: ClaudeSdkAdapter (Agent SDK) · MockRuntimeAdapter      │
+└───────────▲──────────────────────────────────────┬───────────────┘
+            │ messages, usage, context report      │ spans · µUSD · context
+┌───────────┴──────────────────────────────────────▼───────────────┐
+│ 4  Telemetry: span tree, dedup by message_id, integer cost, 7-cat │
+└──────────────────────────────────────┬───────────────────────────┘
+                                       │ WAL writes
+┌──────────────────────────────────────▼───────────────────────────┐
+│ 5  SQLite ~/.visor/traces.db (0600): sessions, turns, spans,      │
+│    session_events, credit_ledger, policy_audit_log                │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 ## Project layout
 
@@ -83,8 +139,14 @@ src/
 tests/                 # Vitest suites
 drizzle/               # generated SQL migrations
 site/                  # Next.js landing page + docs
-electron/              # macOS shell (Milestone 3.5)
+electron/              # macOS app: main process + preload
+scripts/               # desktop staging for the .dmg
+docs/screenshots/      # README images (captured by the app itself)
 ```
+
+## Status
+
+All three PRD phases are built: foundation, the chosen interface, and the core (Agent SDK runtime, verified cost and wallet, override engine, deep inspection, macOS app). See the [roadmap](site/src/app/docs/roadmap/page.mdx). Live runs against the real API haven't been exercised in CI, since they cost money.
 
 ## License
 
