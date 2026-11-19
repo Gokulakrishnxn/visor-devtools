@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 import { VisorEvent } from "@shared/events";
 import type { VisorDb } from "./client";
-import { sessionEvents, sessions } from "./schema";
+import { policyAuditLog, sessionEvents, sessions } from "./schema";
 
 export type SessionSummary = {
   id: string;
@@ -32,6 +32,29 @@ export class TraceStore {
       })
       .from(sessions)
       .orderBy(desc(sessions.startedAt))
+      .limit(limit)
+      .all();
+  }
+
+  /** Every override decision across sessions, newest first. */
+  audit(limit = 100) {
+    return this.db
+      .select({
+        id: policyAuditLog.id,
+        sessionId: policyAuditLog.sessionId,
+        sessionTitle: sessions.title,
+        spanId: policyAuditLog.spanId,
+        toolName: policyAuditLog.toolName,
+        matchedRule: policyAuditLog.matchedRule,
+        decision: policyAuditLog.decision,
+        originalInputJson: policyAuditLog.originalInputJson,
+        finalInputJson: policyAuditLog.finalInputJson,
+        operatorNote: policyAuditLog.operatorNote,
+        createdAt: policyAuditLog.createdAt,
+      })
+      .from(policyAuditLog)
+      .leftJoin(sessions, eq(sessions.id, policyAuditLog.sessionId))
+      .orderBy(desc(policyAuditLog.createdAt))
       .limit(limit)
       .all();
   }

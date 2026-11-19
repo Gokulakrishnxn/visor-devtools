@@ -6,6 +6,7 @@ import { Effort, OverrideDecision, type VisorEvent } from "@shared/events";
 import { parseUsd } from "@shared/money";
 import type { TraceStore } from "./db/queries";
 import type { Wallet } from "./wallet";
+import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
 import type { SessionRunner } from "./runtime/session-runner";
 
 export type AppDeps = {
@@ -147,6 +148,16 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
       "content-disposition": 'attachment; filename="visor-ledger.csv"',
     });
   });
+
+  api.get("/policy", (c) => c.json({ toggles: runner.policy.getToggles(), builtIn: BUILT_IN_RULES, ...("rules" in info ? { configuredRules: info.rules } : {}) }));
+
+  api.put("/policy", async (c) => {
+    const body = PauseToggles.partial().strict().safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "Send { bash?, edits?, mcpWrites? } as booleans" }, 400);
+    return c.json({ toggles: runner.policy.setToggles(body.data) });
+  });
+
+  api.get("/audit", (c) => c.json({ entries: store?.audit() ?? [] }));
 
   api.get("/breakpoints", (c) => c.json({ pending: runner.breakpoints.list(c.req.query("sessionId")) }));
 
