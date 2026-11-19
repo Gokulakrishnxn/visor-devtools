@@ -40,6 +40,19 @@ export type TraceTurn = {
   context?: { used: number; limit: number; breakdown: ContextBreakdown };
 };
 
+/** Totals for the main agent and each subagent (PRD §3.4: isolated per-agent stats). */
+export type AgentStat = {
+  /** null for the main agent, else the subagent span. */
+  spanId: string | null;
+  name: string;
+  steps: number;
+  modelCalls: number;
+  tokens: number;
+  costMicroUsd: number;
+  durationMs?: number;
+  status: SpanStatus | "running";
+};
+
 export type Alert = { id: string; level: "info" | "warning" | "danger"; title: string; detail: string; at: number; spanId?: string };
 
 export type TraceModel = {
@@ -67,6 +80,7 @@ export type TraceModel = {
   contextHistory: { turnIndex: number; used: number; limit: number; breakdown: ContextBreakdown; compacted: boolean }[];
   firstAt: number;
   lastAt: number;
+  agents: AgentStat[];
 };
 
 const ZERO_COST: CostBreakdown = { input: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, output: 0, total: 0, cacheSavings: 0 };
@@ -86,6 +100,7 @@ export const EMPTY_MODEL: TraceModel = {
   contextHistory: [],
   firstAt: 0,
   lastAt: 0,
+  agents: [],
 };
 
 function addCost(a: CostBreakdown, b: CostBreakdown): CostBreakdown {
@@ -101,7 +116,9 @@ function addCost(a: CostBreakdown, b: CostBreakdown): CostBreakdown {
 }
 
 export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
-  const m: TraceModel = { ...EMPTY_MODEL, turns: [], spans: {}, order: [], alerts: [], contextHistory: [] };
+  const m: TraceModel = { ...EMPTY_MODEL, turns: [], spans: {}, order: [], alerts: [], contextHistory: [], agents: [] };
+  // Prompt + output tokens per model-call span, for per-agent totals
+  const tokensBySpan = new Map<string, number>();
   const seen = new Set<string>();
   let compactedThisTurn = false;
   let lastPromptTokens = 0;
@@ -164,6 +181,7 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
       case "usage": {
         if (seen.has(e.messageId)) break; // parallel tool calls repeat usage
         seen.add(e.messageId);
+        tokensBySpan.set(e.spanId, (tokensBySpan.get(e.spanId) ?? 0) + e.usage.inputTokens + e.usage.cacheReadTokens + e.usage.cacheWrite5mTokens + e.usage.cacheWrite1hTokens + e.usage.outputTokens);
         m.usage = addUsage(m.usage, e.usage);
         const price = DEFAULT_PRICING[e.modelId] ?? DEFAULT_PRICING["claude-opus-5-5"]!;
         m.cost = addCost(m.cost, computeCost(e.usage, price));
@@ -216,7 +234,54 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
         break;
     }
   }
+  m.agents = agentStats(m, tokensBySpan);
   return m;
+}
+
+/** The nearest subagent span above a span (null = main agent). */
+function agentOf(m: TraceModel, spanId: string): string | null {
+  let cur = m.spans[spanId]?.parentSpanId ?? null;
+  while (cur) {
+    const s = m.spans[cur];
+    if (!s) return null;
+    if (s.spanType === "subagent") return cur;
+    cur = s.parentSpanId;
+  }
+  return null;
+}
+
+function agentStats(m: TraceModel, tokensBySpan: Map<string, number>): AgentStat[] {
+  const stats = new Map<string | null, AgentStat>();
+  const statFor = (id: string | null): AgentStat => {
+    let st = stats.get(id);
+    if (!st) {
+      const sub = id ? m.spans[id] : undefined;
+      st = {
+        spanId: id,
+        name: sub ? sub.name : "Main agent",
+        steps: 0,
+        modelCalls: 0,
+        tokens: 0,
+        costMicroUsd: 0,
+        durationMs: sub ? (sub.endedAt ? sub.endedAt - sub.startedAt : undefined) : m.lastAt > m.firstAt ? m.lastAt - m.firstAt : undefined,
+        status: sub ? sub.status : (m.session?.status === "completed" ? "ok" : m.session?.status === "error" ? "error" : "running"),
+      };
+      stats.set(id, st);
+    }
+    return st;
+  };
+  statFor(null);
+  for (const id of m.order) {
+    const s = m.spans[id]!;
+    if (s.spanType === "subagent") statFor(id);
+    const owner = statFor(agentOf(m, id));
+    if (s.spanType === "llm") {
+      owner.modelCalls += 1;
+      owner.tokens += tokensBySpan.get(id) ?? 0;
+      owner.costMicroUsd += s.costMicroUsd;
+    } else if (s.spanType !== "thinking" && s.spanType !== "subagent") owner.steps += 1;
+  }
+  return [...stats.values()];
 }
 
 /** Latest known context (last finished turn). */
