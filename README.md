@@ -14,41 +14,50 @@
 
 ## Status
 
-🚧 Early preview. This repository currently contains the landing page and documentation site. The harness itself is built next, phase by phase (see [Roadmap](src/app/docs/roadmap/page.mdx)).
+**Phase 1 (foundation) is complete.** The local daemon, the event stream, the SQLite trace store, the micro-dollar cost engine, the policy and breakpoint engine, and a zero-cost `MockRuntimeAdapter` all work and are tested. The three GUI designs come next in Phase 2. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
 
-## Run the site locally
+## Run it locally
 
-You need Node.js 20+ and pnpm.
+You need Node.js 20.19+ and pnpm.
 
 ```bash
 pnpm install
-pnpm dev        # http://localhost:3000
+pnpm dev
 ```
 
-Other scripts:
+Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`) and click **Run mock session**. Everything runs on the mock runtime: no API key, no spend.
 
-```bash
-pnpm lint       # ESLint
-pnpm typecheck  # Next.js route types + tsc
-pnpm build      # production build
-```
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Daemon on `127.0.0.1:4310` + GUI on `:5173` |
+| `pnpm test` | Unit and integration tests (Vitest, mock runtime only) |
+| `pnpm typecheck` / `pnpm lint` | Strict TypeScript and ESLint |
+| `pnpm build` | GUI bundle (`dist/web`) + `vhud` CLI (`dist/cli.js`) |
+| `node dist/cli.js` | What `npx visor-devtools` will run |
+| `node dist/cli.js doctor` | Checks API key, `~/.visor` permissions, SQLite WAL |
+| `pnpm site:dev` | The landing page and docs at `:3000` |
 
-## What's inside
+Set `VISOR_DB=/some/path/traces.db` to keep traces somewhere other than `~/.visor/`.
+
+## Project layout
 
 ```text
 src/
-├── app/
-│   ├── page.tsx            # landing page
-│   └── docs/               # MDX docs (one folder per page)
-├── components/
-│   ├── landing/            # hero, pillars, animated features, mascot, footer
-│   ├── docs/               # docs shell, Cmd+K search, MDX components
-│   └── ui/rail-toc.tsx     # "On this page" rail
-├── kit/                    # stageshow kit for animated product demos
-└── lib/                    # site config, docs nav, Shiki helpers
+├── shared/            # VisorEvent (zod), micro-dollar money, pricing types
+├── server/
+│   ├── app.ts         # Hono REST API (per-launch token)
+│   ├── server.ts      # daemon: 127.0.0.1:4310 + WebSocket stream
+│   ├── runtime/       # AgentRuntimeAdapter, MockRuntimeAdapter, SessionRunner
+│   ├── interceptor/   # policy rules, breakpoint queue, budget watchdog
+│   ├── telemetry/     # pricing registry, cost + dedup, context, span tree
+│   └── db/            # Drizzle schema, WAL client (0700/0600), recorder
+├── web/               # Vite + React 19 + Tailwind v4 GUI (shadcn/ui conventions)
+└── cli.ts             # vhud / npx visor-devtools
+tests/                 # Vitest suites
+drizzle/               # generated SQL migrations
+site/                  # Next.js landing page + docs
+electron/              # macOS shell (Milestone 3.5)
 ```
-
-Built with Next.js 16, React 19, Tailwind CSS v4, Motion, Shiki and cmdk.
 
 ## License
 
@@ -60,8 +69,8 @@ Copyright (c) 2026 Gokulakrishnan. You can use, copy, modify and distribute this
 
 | Component | Used for | License |
 | --- | --- | --- |
-| [Stageshow](https://github.com/benjitaylor/skills) kit (`src/kit`) | Animated product demos on the landing page | MIT |
-| [Rail TOC](https://github.com/swamimalode07/rare-ui) (`src/components/ui/rail-toc.tsx`) | Docs "On this page" sidebar | See upstream repository |
+| [Stageshow](https://github.com/benjitaylor/skills) kit (`site/src/kit`) | Animated product demos on the landing page | MIT |
+| [Rail TOC](https://github.com/swamimalode07/rare-ui) (`site/src/components/ui/rail-toc.tsx`) | Docs "On this page" sidebar | See upstream repository |
 | [Simple Icons](https://simpleicons.org) | GitHub, Claude and Gemini marks | CC0 (brand marks remain trademarks of their owners) |
 
 Claude is a trademark of Anthropic. Gemini is a trademark of Google. V.I.S.O.R. is an independent project and is not affiliated with or endorsed by either company.
