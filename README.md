@@ -18,4 +18,16 @@
 
 ## License
 
-MIT
+V.I.S.O.R. is open source under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Gokulakrishnan. You can use, copy, modify and distribute this code, including commercially, as long as the copyright notice and license text are kept. The software comes with no warranty.
+
+### Third-party code
+
+| Component | Used for | License |
+| --- | --- | --- |
+| [Stageshow](https://github.com/benjitaylor/skills) kit (`src/kit`) | Animated product demos on the landing page | MIT |
+| [Rail TOC](https://github.com/swamimalode07/rare-ui) (`src/components/ui/rail-toc.tsx`) | Docs "On this page" sidebar | See upstream repository |
+| [Simple Icons](https://simpleicons.org) | GitHub, Claude and Gemini marks | CC0 (brand marks remain trademarks of their owners) |
+
+Claude is a trademark of Anthropic. Gemini is a trademark of Google. V.I.S.O.R. is an independent project and is not affiliated with or endorsed by either company.
