@@ -106,7 +106,8 @@ const RailToc = ({
     (l: number) => {
       const path = pathRef.current
       const length = total.current
-      if (!path || !length) return
+      // Skip frames where the list changed before it was re-measured
+      if (!path || !length || !Number.isFinite(l)) return
       const at = path.getPointAtLength(l)
       const behind = path.getPointAtLength(Math.max(0, l - 1))
       const ahead = path.getPointAtLength(Math.min(length, l + 1))
@@ -146,7 +147,7 @@ const RailToc = ({
 
   const sync = React.useCallback(() => {
     const nodes = lengths.current
-    if (!nodes.length) return
+    if (!nodes.length || nodes.length !== items.length) return
 
     // a clicked heading holds the plane until the reader scrolls, since headings near the end can't scroll up to the anchor
     if (pinned.current !== null) {
@@ -183,6 +184,10 @@ const RailToc = ({
         nodes[index] +
         Math.min(1, Math.max(0, progress)) * (nodes[index + 1] - nodes[index])
     }
+
+    // Measurements can lag a heading list that just changed
+    if (!Number.isFinite(next)) next = nodes[0] ?? 0
+    if (!Number.isFinite(next)) return
 
     aim(next)
     if (!placed.current) {
