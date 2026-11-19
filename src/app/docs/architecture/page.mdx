@@ -1,0 +1,50 @@
+export const metadata = { title: "Architecture" };
+
+V.I.S.O.R. is split into five layers. The GUI and the agent runtime are strictly decoupled across a local WebSocket + REST boundary, so the same React interface runs in a browser during development and inside an Electron window in production.
+
+```text
+┌───────────────────────────────────────────────┐
+│ 1  GUI              React 19 · Tailwind · Shiki │
+└───────────▲───────────────────────┬───────────┘
+            │ VisorEvent stream     │ actions
+┌───────────┴───────────────────────▼───────────┐
+│ 2  Harness daemon   Hono on 127.0.0.1:4310     │
+└───────────▲───────────────────────┬───────────┘
+            │ hooks & budgets       │ allow/edit/deny
+┌───────────┴───────────────────────▼───────────┐
+│ 3  Runtime adapter  Claude Agent SDK | Mock    │
+└───────────▲───────────────────────┬───────────┘
+            │ raw messages & usage  │ spans & cost
+┌───────────┴───────────────────────▼───────────┐
+│ 4  Telemetry        spans · µUSD · context     │
+└───────────────────────┬───────────────────────┘
+                        │ atomic writes (WAL)
+┌───────────────────────▼───────────────────────┐
+│ 5  Persistence      ~/.visor/traces.db (0600)  │
+└───────────────────────────────────────────────┘
+```
+
+## The layers
+
+### 1. Presentation GUI
+Live execution stream, Shiki diffs, subagent trees, the 7-category context visualizer, the cost and wallet HUD, `Cmd+K`, and interactive override cards. Wrapped in Electron for macOS.
+
+### 2. Local harness daemon
+Session and workspace control, the policy evaluator and breakpoint queue (which *freezes* a tool call's promise until you decide), the hard budget watchdog, and the notification trigger engine.
+
+### 3. Agent runtime (adapters)
+A single `AgentRuntimeAdapter` interface with two implementations: `ClaudeSdkAdapter` for real runs and `MockRuntimeAdapter` for deterministic, zero-cost replays used by previews and tests.
+
+### 4. Telemetry & cost engine
+Builds `trace_id` / `span_id` / `parent_span_id` trees, deduplicates parallel usage by `message_id`, computes cost in integer micro-dollars, and tracks context attribution and compaction boundaries.
+
+### 5. Local persistence
+SQLite in WAL mode via Drizzle ORM. Tables: `sessions`, `turns`, `spans`, `credit_ledger`, `policy_audit_log`. See [Data model](/docs/data-model).
+
+## Invariants
+
+- **No floating-point money.** All amounts are integers in micro-dollars.
+- **Hooks first.** `PreToolUse` hooks run before allow/deny rules, so built-in protections can't be bypassed by accident.
+- **Reconciled accounting.** Live deltas for instant UI, reconciled against the SDK's final `total_cost_usd`.
+- **Zero-cost development.** All UI work and tests run on the mock adapter.
+- **Local only.** Bound to `127.0.0.1` with a per-launch token; `~/.visor` is `0700`, the database `0600`.

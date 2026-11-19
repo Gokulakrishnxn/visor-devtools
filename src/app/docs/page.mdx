@@ -1,0 +1,32 @@
+export const metadata = { title: "Introduction" };
+
+Terminal coding agents hide the most important details behind short summaries like *“Edited 2 files”*. You don't see which files, what the model was thinking, what an MCP server returned, or what the prompt actually cost.
+
+**V.I.S.O.R.** (*Verified Inspection, Spans, Overrides & Runtime*) is a local-first harness and live debugger for Claude. It drives the agent itself, streams every step to a polished desktop GUI, lets you stop risky tool calls before they run, and tracks real money down to the micro-dollar.
+
+<Note>
+V.I.S.O.R. is in early preview. These docs describe the product as specified in the PRD; features land phase by phase (see the [Roadmap](/docs/roadmap)).
+</Note>
+
+## The five pillars
+
+| Letter | Pillar | In one line |
+| --- | --- | --- |
+| **V** | Verified | Exact token counts, cache savings and USD per prompt, never estimates. |
+| **I** | Inspection | Live thinking, context usage and raw tool inputs/outputs. |
+| **S** | Spans | Every prompt as a nested, timed execution tree. |
+| **O** | Overrides | Pause, edit or deny tool calls mid-flight; hard budget caps. |
+| **R** | Runtime | The harness runs the agent loop itself, on your machine. |
+
+## Why a GUI, not a TUI?
+
+Desktop viewers proved how much clearer a dedicated interface is: syntax-highlighted reads, inline diffs, subagent trees, real selectable text and one-click copy. V.I.S.O.R. keeps that craft and turns the viewer into a **live, interactive harness**. A thin `vhud` command only starts the local server and opens the window.
+
+## Where to next
+
+<CardGroup>
+  <Card title="Quickstart" href="/docs/quickstart">Run the harness and open the GUI in a few minutes.</Card>
+  <Card title="Architecture" href="/docs/architecture">How the five layers fit together.</Card>
+  <Card title="Overrides" href="/docs/overrides">Breakpoints: approve, edit JSON, or deny.</Card>
+  <Card title="Verified cost" href="/docs/verified">How every micro-dollar is counted.</Card>
+</CardGroup>

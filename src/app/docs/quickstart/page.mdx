@@ -1,0 +1,62 @@
+export const metadata = { title: "Quickstart" };
+
+<Warning>
+The packaged `npx visor-devtools` command arrives in Phase 3. Until then, run V.I.S.O.R. from source.
+</Warning>
+
+<Steps>
+  <Step title="Check your tools">
+    You need **Node.js 20+** and **pnpm**. On macOS with Homebrew:
+
+    ```bash
+    brew install node pnpm
+    ```
+  </Step>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/Gokulakrishnxn/visor-devtools.git
+    cd visor-devtools
+    pnpm install
+    ```
+  </Step>
+  <Step title="Add your API key (optional)">
+    Previews and tests run on the zero-cost `MockRuntimeAdapter`, so you can skip this. For live runs, copy the example file and add your key:
+
+    ```bash
+    cp .env.example .env
+    # then edit .env
+    ANTHROPIC_API_KEY=sk-ant-...
+    ```
+  </Step>
+  <Step title="Start it">
+    ```bash
+    pnpm dev
+    ```
+    Open the printed local URL. The daemon listens on `127.0.0.1:4310` only.
+  </Step>
+</Steps>
+
+## Once it ships
+
+<Tabs>
+  <Tab title="npx">
+    ```bash
+    npx visor-devtools
+    ```
+  </Tab>
+  <Tab title="Homebrew">
+    ```bash
+    brew install --cask visor-devtools
+    ```
+  </Tab>
+  <Tab title="CLI launcher">
+    ```bash
+    vhud          # open the GUI in the current folder
+    vhud doctor   # check API key, SQLite permissions, MCP health
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+Set a budget before your first live run: `vhud --cap 5` stops the agent automatically at $5.00.
+</Tip>
