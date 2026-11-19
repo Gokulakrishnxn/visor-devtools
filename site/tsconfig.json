@@ -37,8 +37,6 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules",
-    ".agents",
-    ".claude"
+    "node_modules"
   ]
 }
