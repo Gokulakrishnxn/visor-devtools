@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored design skill and its kit (third-party code)
+    ".agents/**",
+    ".claude/**",
+    "src/kit/**",
   ]),
 ]);
 
