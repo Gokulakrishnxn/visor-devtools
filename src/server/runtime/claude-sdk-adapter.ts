@@ -85,6 +85,43 @@ function resultText(content: unknown): string {
   return "";
 }
 
+/** The parts of the SDK's `getContextUsage()` answer we read. */
+export type SdkContextUsage = {
+  categories: { id?: string; name: string; tokens: number; kind: "used" | "free" | "buffer" | "deferred" }[];
+  totalTokens: number;
+  rawMaxTokens: number;
+};
+
+/**
+ * Maps the SDK's real context report onto V.I.S.O.R.'s 7 categories (PRD §4.3).
+ * Rules and tool schemas come straight from the report; the SDK's single
+ * "messages" row is split across tool results, thinking, subagents, mentioned
+ * files and conversation using the shares V.I.S.O.R. tracked while streaming.
+ */
+export function mapContextUsage(report: SdkContextUsage, tracked: ContextBreakdown): { breakdown: ContextBreakdown; limit: number } {
+  const used = report.categories.filter((c) => c.kind === "used");
+  const sum = (ids: string[], names: RegExp) => used.filter((c) => (c.id ? ids.includes(c.id) : names.test(c.name))).reduce((n, c) => n + c.tokens, 0);
+  const rules = sum(["memory_files", "system_prompt"], /memory|system prompt/i);
+  const schemas = sum(["system_tools", "mcp_tools", "mcp_instructions", "skills", "custom_agents"], /tools|mcp|skills|agents/i);
+  const messages = sum(["messages"], /^messages$/i);
+  const parts = ["mentionedFiles", "toolResults", "thinking", "subagents", "messages"] as const;
+  const trackedTotal = parts.reduce((n, k) => n + tracked[k], 0);
+  const breakdown: ContextBreakdown = { ...emptyBreakdown(), projectRules: rules, toolSchemas: schemas };
+  if (trackedTotal === 0) breakdown.messages = messages;
+  else {
+    let given = 0;
+    for (const k of parts.slice(0, -1)) {
+      breakdown[k] = Math.floor((messages * tracked[k]) / trackedTotal);
+      given += breakdown[k];
+    }
+    breakdown.messages = messages - given; // the remainder keeps the total exact
+  }
+  return { breakdown, limit: report.rawMaxTokens };
+}
+
+const withTimeout = <T,>(p: Promise<T>, ms: number) =>
+  Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
+
 /** A tiny push/pull channel: SDK messages and hook callbacks both produce events. */
 class Channel<T> {
   private items: T[] = [];
@@ -170,6 +207,8 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
     const context: ContextBreakdown = emptyBreakdown();
     let lastPromptTokens = 0;
     let finished = false;
+    // Real thinking-token counts from the SDK replace our estimate when present
+    let thinkingFromSdk = false;
 
     emit({
       type: "session.started",
@@ -248,7 +287,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
       return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } };
     };
 
-    const handle = (m: SDKMessage) => {
+    const handle = (m: SDKMessage, contextReport?: SdkContextUsage) => {
       switch (m.type) {
         case "stream_event": {
           const ev = m.event as unknown as Record<string, unknown> & { type: string };
@@ -271,7 +310,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
             const delta = ev.delta as { type: string; thinking?: string; text?: string };
             if (delta.type === "thinking_delta" && llm.thinkingSpanId && delta.thinking) {
               emit({ type: "span.delta", sessionId, spanId: llm.thinkingSpanId, text: delta.thinking, at: this.now() });
-              context.thinking += Math.ceil(delta.thinking.length / 4);
+              if (!thinkingFromSdk) context.thinking += Math.ceil(delta.thinking.length / 4);
             } else if (delta.type === "text_delta" && delta.text) {
               closeThinking(llm);
               emit({ type: "span.delta", sessionId, spanId: llm.spanId, text: delta.text, at: this.now() });
@@ -333,6 +372,15 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
           return;
         }
         case "system": {
+          if ((m.subtype as string) === "thinking_tokens") {
+            const delta = (m as unknown as { estimated_tokens_delta?: number }).estimated_tokens_delta;
+            if (typeof delta === "number") {
+              if (!thinkingFromSdk) context.thinking = 0; // switch from estimates to real counts
+              thinkingFromSdk = true;
+              context.thinking += Math.max(0, delta);
+            }
+            return;
+          }
           if (m.subtype === "compact_boundary") {
             const meta = (m as unknown as { compact_metadata: { pre_tokens: number; post_tokens?: number } }).compact_metadata;
             const spanId = this.newId();
@@ -359,10 +407,16 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
           // The SDK's total is authoritative (PRD invariant 3); converted once via its decimal text
           const authoritative = typeof m.total_cost_usd === "number" ? parseUsd(m.total_cost_usd.toFixed(6)) : computed.total;
           const price = this.pricing.get(modelId);
-          const used = Object.values(context).reduce((a, b) => a + b, 0);
-          // Whatever the SDK sent that we can't attribute (rules, tool schemas) shows as project rules + schemas
-          const unattributed = Math.max(0, lastPromptTokens - used);
-          const breakdown: ContextBreakdown = { ...context, toolSchemas: context.toolSchemas + Math.round(unattributed * 0.7), projectRules: context.projectRules + Math.round(unattributed * 0.3) };
+          let breakdown: ContextBreakdown;
+          let limit = price.contextWindow;
+          if (contextReport) {
+            ({ breakdown, limit } = mapContextUsage(contextReport, context));
+          } else {
+            // Fallback estimate: what we can't attribute (rules, tool schemas) splits across those two
+            const used = Object.values(context).reduce((a, b) => a + b, 0);
+            const unattributed = Math.max(0, lastPromptTokens - used);
+            breakdown = { ...context, toolSchemas: context.toolSchemas + Math.round(unattributed * 0.7), projectRules: context.projectRules + Math.round(unattributed * 0.3) };
+          }
           emit({
             type: "turn.ended",
             sessionId,
@@ -371,7 +425,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
             computedCostMicroUsd: computed.total,
             cacheSavingsMicroUsd: computed.cacheSavings,
             contextUsedTokens: Object.values(breakdown).reduce((a, b) => a + b, 0),
-            contextLimitTokens: price.contextWindow,
+            contextLimitTokens: limit,
             contextBreakdown: breakdown,
             at: this.now(),
           });
@@ -404,7 +458,21 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
 
     const pump = (async () => {
       try {
-        for await (const m of this.queryFn({ prompt: options.prompt, options: sdkOptions })) handle(m);
+        const q = this.queryFn({ prompt: options.prompt, options: sdkOptions }) as AsyncIterable<SDKMessage> & {
+          getContextUsage?: (opts?: { detail?: "summary" | "full" }) => Promise<SdkContextUsage>;
+        };
+        for await (const m of q) {
+          let report: SdkContextUsage | undefined;
+          // At the end of the turn, ask the SDK for the real context breakdown (best effort)
+          if (m.type === "result" && typeof q.getContextUsage === "function") {
+            try {
+              report = await withTimeout(q.getContextUsage({ detail: "summary" }), 3000);
+            } catch {
+              report = undefined;
+            }
+          }
+          handle(m, report);
+        }
       } catch (err) {
         if (!finished) {
           for (const llm of llms.values()) closeLlm(llm);
