@@ -16,7 +16,7 @@ type SessionState = {
   selectedSpanId: string | null;
   error: string | null;
   connect: () => void;
-  start: (capUsd?: string) => Promise<void>;
+  start: (opts?: { prompt?: string; capUsd?: string; modelId?: string; effort?: "low" | "medium" | "high" }) => Promise<void>;
   resolve: (decision: OverrideDecision) => Promise<void>;
   stop: () => Promise<void>;
   select: (spanId: string | null) => void;
@@ -70,11 +70,11 @@ export const useSession = create<SessionState>((set, get) => ({
     };
   },
 
-  async start(capUsd) {
+  async start(opts = {}) {
     try {
       const { sessionId } = await api<{ sessionId: string }>(get().token, "/api/sessions", {
         method: "POST",
-        body: JSON.stringify({ prompt: "", capUsd: capUsd ?? "5" }),
+        body: JSON.stringify({ prompt: opts.prompt ?? "", capUsd: opts.capUsd || "5", modelId: opts.modelId, effort: opts.effort }),
       });
       set({ sessionId, cursor: null, selectedSpanId: null, error: null });
     } catch (err) {
