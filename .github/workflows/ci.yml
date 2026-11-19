@@ -16,6 +16,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          # The Linux jobs never launch the desktop app
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
@@ -34,6 +37,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          # The Linux jobs never launch the desktop app
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - run: pnpm --filter visor-site lint
       - run: pnpm --filter visor-site typecheck
       - run: pnpm --filter visor-site build
