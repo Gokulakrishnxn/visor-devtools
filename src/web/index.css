@@ -19,6 +19,11 @@
   --violet: #a78bfa;
   --indigo: #818cf8;
   --radius: 10px;
+  /* Harness shell */
+  --canvas: #19191b;
+  --sidebar: #2b2e34;
+  --bubble: #2c2c2f;
+  --composer: #222225;
 }
 
 @theme inline {
@@ -60,4 +65,9 @@ body {
 /* Every live number uses tabular figures so it never jitters */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }

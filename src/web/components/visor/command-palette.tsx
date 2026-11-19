@@ -1,5 +1,5 @@
 import { Command } from "cmdk";
-import { AlertTriangle, History, LayoutGrid, Play, Search, Square } from "lucide-react";
+import { AlertTriangle, History, Play, Search, Square } from "lucide-react";
 import { PAST_SESSIONS } from "@/lib/mock-data";
 import type { TraceModel } from "@/lib/trace-model";
 import { useSession } from "@/stores/session-store";
@@ -21,9 +21,6 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
   const start = useSession((s) => s.start);
   const stop = useSession((s) => s.stop);
   const close = () => setOpen(false);
-  const go = (path: string) => {
-    window.location.href = `${path}${window.location.search}`;
-  };
 
   return (
     <Command.Dialog
@@ -48,11 +45,6 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
           <Command.Item className={item} onSelect={() => (void stop(), close())}>
             <Square size={14} className="text-rose" /> Stop the current session
           </Command.Item>
-          {[1, 2, 3].map((n) => (
-            <Command.Item key={n} className={item} value={`switch design ${n}`} onSelect={() => go(`/preview/${n}`)}>
-              <LayoutGrid size={14} className="text-faint" /> Switch to Design {n}
-            </Command.Item>
-          ))}
         </Command.Group>
 
         {model.order.length > 0 && (
