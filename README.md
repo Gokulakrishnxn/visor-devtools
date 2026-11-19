@@ -14,7 +14,15 @@
 
 ## Status
 
-**Phase 1 (foundation) is complete.** The local daemon, the event stream, the SQLite trace store, the micro-dollar cost engine, the policy and breakpoint engine, and a zero-cost `MockRuntimeAdapter` all work and are tested. The three GUI designs come next in Phase 2. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
+**Phase 2 (design gate) is ready for review.** Three clickable GUI prototypes stream the same live mock session from the local daemon:
+
+| Route | Design | Idea |
+| --- | --- | --- |
+| `/preview/1` | Studio Tri-Pane | Sessions + MCP sidebar, live stream, tabbed inspector |
+| `/preview/2` | Linear Focus | Calm canvas, split diffs, floating override dock, slide-over inspector |
+| `/preview/3` | Mission Deck | Span waterfall, split draggable tabs, breakpoint banner, alert feed, replay |
+
+All three have live cost / cache / wallet counters, thinking accordions, Shiki diffs, nested subagents, the 7-category context breakdown, ⌘K, J/K span navigation, and Approve / Edit JSON (CodeMirror + Zod) / Deny with A/E/D. Phase 1 (daemon, SQLite, cost engine, breakpoints) is merged. See the [roadmap](site/src/app/docs/roadmap/page.mdx).
 
 ## Run it locally
 
@@ -25,7 +33,7 @@ pnpm install
 pnpm dev
 ```
 
-Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`) and click **Run mock session**. Everything runs on the mock runtime: no API key, no spend.
+Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`) and pick a design. Each one starts a mock session automatically. Everything runs on the mock runtime: no API key, no spend.
 
 | Command | What it does |
 | --- | --- |
