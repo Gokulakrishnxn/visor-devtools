@@ -71,7 +71,8 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
                   <Icon size={14} className={spanTone(s.spanType)} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-foreground">
-                      {SPAN_LABEL[s.spanType]} · <span className="font-mono text-[12px] text-muted-foreground">{s.name}</span>
+                      {SPAN_LABEL[s.spanType]}
+                      {s.name !== SPAN_LABEL[s.spanType] && <span className="font-mono text-[12px] text-muted-foreground"> · {s.name}</span>}
                     </span>
                     {body && <span className="block truncate text-[11.5px] text-faint">{snippet(body)}</span>}
                   </span>
