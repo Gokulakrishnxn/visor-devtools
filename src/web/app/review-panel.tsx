@@ -22,7 +22,7 @@ export function ReviewPanel({ model, turnId, spanId, onSpan, onClose }: { model:
   const path = span.filePath ?? span.name;
 
   return (
-    <div className="flex h-full flex-col bg-[#141416]">
+    <div className="flex h-full flex-col bg-[var(--panel)]">
       <div className="flex items-center gap-2 px-3 pt-3">
         <span className="flex items-center gap-2 rounded-xl bg-white/[0.07] px-3 py-1.5 text-[13.5px]">
           Review · turn {turn.index + 1}
@@ -38,7 +38,7 @@ export function ReviewPanel({ model, turnId, spanId, onSpan, onClose }: { model:
           <ChevronDown size={13} className="shrink-0 text-white/40" />
         </button>
         {menu && (
-          <div className="absolute left-3 top-10 z-20 w-72 rounded-xl border border-white/10 bg-[#1c1d20] p-1 shadow-2xl">
+          <div className="absolute left-3 top-10 z-20 w-72 rounded-xl border border-white/10 bg-popover p-1 shadow-2xl">
             {files.map((f) => (
               <button
                 key={f.spanId}

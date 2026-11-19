@@ -12,7 +12,7 @@ export function Payload({ model, spanId }: { model: TraceModel; spanId: string |
         <div className="mb-1.5 flex items-center justify-between text-[11px] text-faint">
           {label} <CopyButton text={JSON.stringify(value, null, 2)} />
         </div>
-        <div className="max-h-72 overflow-auto rounded-lg bg-black/35 p-3">
+        <div className="max-h-72 overflow-auto rounded-lg bg-code p-3">
           <JsonView value={value} />
         </div>
       </div>

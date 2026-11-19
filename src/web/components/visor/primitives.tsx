@@ -84,7 +84,7 @@ export function CopyButton({ text, className, label = "Copy" }: { text: string; 
 }
 
 /** A thin progress ring (context %, budget %). */
-export function Ring({ value, size = 22, tone = "#7aa2ff", label }: { value: number; size?: number; tone?: string; label?: string }) {
+export function Ring({ value, size = 22, tone = "var(--indigo)", label }: { value: number; size?: number; tone?: string; label?: string }) {
   const r = (size - 4) / 2;
   const c = 2 * Math.PI * r;
   const v = Math.max(0, Math.min(1, value));

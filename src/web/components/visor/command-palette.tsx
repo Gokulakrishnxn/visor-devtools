@@ -28,7 +28,7 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
       onOpenChange={setOpen}
       label="Command palette"
       overlayClassName="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
-      contentClassName="fixed left-1/2 top-[12vh] z-[81] w-[min(640px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-2xl border border-border-strong bg-[#12151b] shadow-2xl"
+      contentClassName="fixed left-1/2 top-[12vh] z-[81] w-[min(640px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-2xl border border-border-strong bg-popover shadow-2xl"
     >
       <div className="flex items-center gap-2 border-b border-border px-4">
         <Search size={16} className="text-faint" />

@@ -86,7 +86,7 @@ export function Composer({
             <ChevronDown size={13} className="text-white/40" />
           </button>
           {menu === "perm" && (
-            <div className="absolute bottom-10 left-0 z-30 w-72 rounded-2xl border border-white/10 bg-[#1f2023] p-1.5 shadow-2xl">
+            <div className="absolute bottom-10 left-0 z-30 w-72 rounded-2xl border border-white/10 bg-popover p-1.5 shadow-2xl">
               {PERMISSIONS.map((p) => (
                 <button key={p.id} type="button" onClick={() => (onChange({ ...value, permission: p.id }), close())} className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/[0.06]">
                   <span className="min-w-0 flex-1">
@@ -115,7 +115,7 @@ export function Composer({
             <ChevronDown size={13} className="text-white/40" />
           </button>
           {menu === "model" && (
-            <div className="absolute bottom-10 right-0 z-30 w-60 rounded-2xl border border-white/10 bg-[#1f2023] p-1.5 shadow-2xl">
+            <div className="absolute bottom-10 right-0 z-30 w-60 rounded-2xl border border-white/10 bg-popover p-1.5 shadow-2xl">
               <p className="px-3 pb-1 pt-1.5 text-[11px] text-white/40">Model</p>
               {MODELS.map((m) => (
                 <button key={m.id} type="button" onClick={() => onChange({ ...value, modelId: m.id })} className="flex w-full items-center rounded-xl px-3 py-1.5 text-left text-[13.5px] hover:bg-white/[0.06]">
@@ -150,7 +150,7 @@ export function Composer({
             onClick={send}
             disabled={!text.trim()}
             aria-label="Send"
-            className="flex size-9 items-center justify-center rounded-full bg-[#5a7bd8] text-white transition-opacity disabled:opacity-40"
+            className="flex size-9 items-center justify-center rounded-full bg-foreground text-[var(--primary-foreground)] transition-opacity disabled:opacity-40"
           >
             <ArrowUp size={17} />
           </button>

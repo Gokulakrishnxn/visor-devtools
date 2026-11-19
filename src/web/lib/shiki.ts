@@ -12,7 +12,7 @@ function highlighter() {
       import("shiki/engine/javascript"),
     ]);
     return createHighlighterCore({
-      themes: [import("@shikijs/themes/github-dark-default")],
+      themes: [import("@shikijs/themes/dark-plus")],
       langs: [
         import("@shikijs/langs/typescript"),
         import("@shikijs/langs/tsx"),
@@ -26,7 +26,8 @@ function highlighter() {
   return loading;
 }
 
-export const THEME = "github-dark-default";
+/** VS Code Dark+ token colors, the palette Cursor users read all day. */
+export const THEME = "dark-plus";
 
 export function langFor(path?: string): string {
   const ext = path?.split(".").pop()?.toLowerCase();

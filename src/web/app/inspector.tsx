@@ -31,7 +31,7 @@ export function Inspector({
   onClose: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col bg-[#141416]">
+    <div className="flex h-full flex-col bg-[var(--panel)]">
       <div role="tablist" className="flex items-center gap-1 border-b border-white/[0.07] px-2 py-2">
         {TABS.map((t) => (
           <button
