@@ -368,6 +368,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
             sessionId,
             turnId,
             costMicroUsd: authoritative,
+            computedCostMicroUsd: computed.total,
             cacheSavingsMicroUsd: computed.cacheSavings,
             contextUsedTokens: Object.values(breakdown).reduce((a, b) => a + b, 0),
             contextLimitTokens: price.contextWindow,

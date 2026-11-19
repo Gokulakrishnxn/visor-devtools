@@ -15,6 +15,7 @@ import { Resizer, usePref } from "./resizer";
 import { ReviewPanel } from "./review-panel";
 import { LedgerView, McpView, RulesView } from "./side-views";
 import { Sidebar, type SidebarView } from "./sidebar";
+import { WalletDialog } from "./wallet-dialog";
 
 type RightPanel = { kind: "inspector" } | { kind: "review"; turnId: string; spanId: string } | null;
 
@@ -46,6 +47,8 @@ export function HarnessApp() {
   const [panel, setPanel] = useState<RightPanel>(null);
   const [tab, setTab] = useState<InspectorTab>("context");
   const [drawer, setDrawer] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const startError = useSession((s) => s.error);
   const [composer, setComposer] = useState<ComposerValue>({ modelId: "claude-opus-5-5", effort: "medium", permission: "ask", capUsd: "5" });
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -98,6 +101,7 @@ export function HarnessApp() {
         else void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort });
       }}
       onSearch={() => h.ui.setPalette(true)}
+      onWallet={() => (setDrawer(false), setWalletOpen(true))}
     />
   );
 
@@ -205,7 +209,7 @@ export function HarnessApp() {
             )}
             {view === "rules" && <RulesView model={model} onSelect={(id) => (setView("chat"), selectSpan(id))} />}
             {view === "mcp" && <McpView />}
-            {view === "ledger" && <LedgerView model={model} />}
+            {view === "ledger" && <LedgerView model={model} onOpenWallet={() => setWalletOpen(true)} />}
           </div>
         </div>
 
@@ -218,6 +222,7 @@ export function HarnessApp() {
               onStop={() => void stop()}
               onSend={(prompt) => void h.start({ prompt, capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort })}
             />
+            {startError && <p className="mt-2 text-center text-[12.5px] text-rose">{startError}</p>}
             <p className="mt-2 text-center text-[11.5px] text-white/30">
               {live ? <span className="text-amber/80">Live · Claude Agent SDK · spends real money</span> : "Mock runtime · $0 API spend"}
               {info?.configError && <span className="text-rose/80"> · .visor.json is invalid, using defaults</span>} · J/K steps · A/E/D decide
@@ -250,6 +255,7 @@ export function HarnessApp() {
       )}
 
       <CommandPalette model={model} onSelectSpan={selectSpan} />
+      <WalletDialog open={walletOpen} onClose={() => setWalletOpen(false)} model={model} />
     </div>
   );
 }

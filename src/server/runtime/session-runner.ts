@@ -17,6 +17,8 @@ export type SessionRunnerDeps = {
   /** Validate every event against the zod schema (on in dev and tests). */
   validate?: boolean;
   now?: () => number;
+  /** Hard cap per turn (from .visor.json), on top of the session cap. */
+  turnCapMicroUsd?: number | null;
 };
 
 /**
@@ -78,9 +80,12 @@ export class SessionRunner {
     const { sessionId } = options;
     const controller = new AbortController();
     this.controllers.set(sessionId, controller);
-    const watchdog = new BudgetWatchdog(options.budgetCapMicroUsd);
+    const watchdog = new BudgetWatchdog(options.budgetCapMicroUsd, this.deps.turnCapMicroUsd ?? null);
     const spend = new UsageLedger();
-    const spent = () => spend.cost((id) => this.pricing.get(id)).total;
+    let turnSpend = new UsageLedger();
+    const priceOf = (id: string) => this.pricing.get(this.pricing.has(id) ? id : options.modelId);
+    const spent = () => spend.cost(priceOf).total;
+    const turnSpent = () => turnSpend.cost(priceOf).total;
 
     const abortForBudget = () => {
       if (controller.signal.aborted) return;
@@ -90,7 +95,7 @@ export class SessionRunner {
 
     const onToolUse = async (req: ToolUseRequest): Promise<ToolUseVerdict> => {
       // 1. Hard budget kill-switch, before anything else runs
-      if (watchdog.check(spent()).status === "exceeded") {
+      if (watchdog.check(spent(), turnSpent()).status === "exceeded") {
         abortForBudget();
         return { decision: "denied", note: "Budget cap reached" };
       }
@@ -140,9 +145,11 @@ export class SessionRunner {
 
     try {
       for await (const event of this.deps.adapter.run(options, { onToolUse, signal: controller.signal })) {
+        if (event.type === "turn.started") turnSpend = new UsageLedger();
         if (event.type === "usage") {
           spend.add(event.messageId, event.modelId, event.usage);
-          if (watchdog.check(spent()).status === "exceeded") abortForBudget();
+          turnSpend.add(event.messageId, event.modelId, event.usage);
+          if (watchdog.check(spent(), turnSpent()).status === "exceeded") abortForBudget();
         }
         this.emit(event);
       }

@@ -10,6 +10,7 @@ import { TraceRecorder } from "./db/recorder";
 import { MockRuntimeAdapter } from "./runtime/mock-adapter";
 import { ClaudeSdkAdapter } from "./runtime/claude-sdk-adapter";
 import { TraceStore } from "./db/queries";
+import { Wallet } from "./wallet";
 import { loadConfig, resolveRuntime, type RuntimeKind } from "./config";
 import { SessionRunner } from "./runtime/session-runner";
 import { PolicyEngine } from "./interceptor/policy";
@@ -59,6 +60,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const runner = new SessionRunner({
     adapter,
     policy: new PolicyEngine(config.breakpoints),
+    turnCapMicroUsd: config.budget.turnCapUsd ?? null,
     pricing,
     validate: true,
   });
@@ -66,6 +68,14 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const db = openDatabase(opts.dbPath);
   const recorder = new TraceRecorder(db);
   runner.subscribe((e) => recorder.record(e));
+  // Only live runs spend real money, so only they debit the prepaid wallet
+  const wallet = new Wallet(db, runtime === "claude");
+  const titles = new Map<string, string>();
+  runner.subscribe((e) => {
+    if (e.type === "session.started") titles.set(e.sessionId, e.title);
+    wallet.onEvent(e, titles.get(e.sessionId));
+    if (e.type === "session.ended") titles.delete(e.sessionId);
+  });
 
   const app = createApp({
     runner,
@@ -74,6 +84,8 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     defaultModel: config.model,
     defaultEffort: config.effort,
     store: new TraceStore(db),
+    wallet,
+    defaultCapMicroUsd: config.budget.sessionCapUsd ?? null,
     info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), rules: config.breakpoints.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
