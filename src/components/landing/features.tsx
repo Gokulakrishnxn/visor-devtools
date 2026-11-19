@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { DiffCard } from "./diff-card";
-import { ContextBar, CostReceipt, SpanStream, Waterfall } from "./feature-cards";
+import { ContextStage, CostStage, SpanStage, WaterfallStage } from "./feature-stages";
 
 function Card({
   title,
@@ -43,7 +43,7 @@ export function Features() {
           title="Every step, in the open"
           body="Thinking, reads, MCP calls, and subagents stream in as spans the moment they start. No more “Edited 2 files”."
         >
-          <SpanStream />
+          <SpanStage />
         </Card>
         <Card
           className="lg:col-span-3"
@@ -58,7 +58,7 @@ export function Features() {
           title="Cost, to the micro-dollar"
           body="Integer micro-dollar accounting per bucket, reconciled against the SDK's own totals."
         >
-          <CostReceipt />
+          <CostStage />
         </Card>
         <Card
           className="lg:col-span-2"
@@ -66,7 +66,7 @@ export function Features() {
           title="Context in seven colors"
           body="Know exactly what fills the window before compaction hits."
         >
-          <ContextBar />
+          <ContextStage />
         </Card>
         <Card
           className="lg:col-span-2"
@@ -74,7 +74,7 @@ export function Features() {
           title="Spans as a waterfall"
           body="Find the slow tool, the failing Bash, the subagent that ate the budget."
         >
-          <Waterfall />
+          <WaterfallStage />
         </Card>
       </div>
     </section>
