@@ -104,7 +104,8 @@
 .fs-span[data-tone="rose"] { background: rgba(251,113,133,.7); }
 .fs-span[data-failed] { box-shadow: 0 0 0 1px var(--rose); }
 .fs-axis { display: flex; justify-content: space-between; padding: 4px 0 0 92px; color: var(--fg-faint); font-size: 11px; }
-.fs-playhead { position: absolute; top: -4px; bottom: 18px; width: 1px; background: var(--fg-muted); opacity: 0; transition: opacity .2s ease; }
+.fs-playhead-lane { position: absolute; top: -4px; bottom: 18px; left: 92px; right: 0; pointer-events: none; }
+.fs-playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--fg-muted); opacity: 0; transition: opacity .2s ease; }
 .fs-playhead[data-on] { opacity: .6; }
 .fs-err {
   justify-self: end; margin-top: 6px; padding: 4px 8px; border-radius: 6px;

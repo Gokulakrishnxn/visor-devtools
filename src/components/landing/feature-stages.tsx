@@ -391,7 +391,9 @@ export function WaterfallStage() {
             <span>2.1s</span>
             <span>4.2s</span>
           </div>
-          <span className="fs-playhead" style={{ left: `calc(92px + (100% - 92px) * ${s.t / 100})` }} data-on={(s.t > 0 && s.t < 100) || undefined} />
+          <span className="fs-playhead-lane" aria-hidden>
+            <span className="fs-playhead" style={{ left: `${s.t}%` }} data-on={(s.t > 0 && s.t < 100) || undefined} />
+          </span>
           <span className="fs-err" data-on={s.failed || undefined}>
             bash · exit 1 · 1.0s
           </span>
