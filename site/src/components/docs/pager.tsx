@@ -45,7 +45,7 @@ export function Pager() {
         )}
       </div>
       <a
-        href={`${site.repo}/blob/main/src/app/docs/${file}`}
+        href={`${site.repo}/blob/main/site/src/app/docs/${file}`}
         target="_blank"
         rel="noreferrer"
         className="mt-8 inline-block text-sm text-fg-faint hover:text-fg"
