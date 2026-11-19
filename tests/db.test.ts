@@ -36,10 +36,11 @@ describe("SQLite persistence", () => {
     expect(session).toMatchObject({ id: "01JSESSION", status: "completed", effortLevel: "medium" });
     expect(session.totalCostMicroUsd).toBeGreaterThan(0);
 
-    const turn = db.select().from(turns).get()!;
-    expect(turn.costMicroUsd).toBe(session.totalCostMicroUsd);
-    expect(turn.inputTokens).toBeGreaterThan(0);
-    expect(JSON.parse(turn.contextBreakdownJson!)).toHaveProperty("toolResults");
+    const turnRows = db.select().from(turns).all();
+    expect(turnRows).toHaveLength(2);
+    expect(turnRows.reduce((n, t) => n + t.costMicroUsd, 0)).toBe(session.totalCostMicroUsd);
+    expect(turnRows[0]!.inputTokens).toBeGreaterThan(0);
+    expect(JSON.parse(turnRows[0]!.contextBreakdownJson!)).toHaveProperty("toolResults");
 
     const rows = db.select().from(spans).all();
     expect(rows.every((r) => r.status !== "running" && r.latencyMs !== null)).toBe(true);

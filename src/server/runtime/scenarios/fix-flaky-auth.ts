@@ -39,11 +39,22 @@ export type SubagentStep = {
   handoffTokens: number;
 };
 
+/** The harness summarizes old tool output to free context (PreCompact / PostCompact). */
+export type CompactionStep = {
+  kind: "compaction";
+  /** Tool-result tokens dropped from the window. */
+  droppedTokens: number;
+  /** Size of the summary that replaces them (counted as messages). */
+  summaryTokens: number;
+  ms: number;
+};
+
+export type ScenarioTurn = { prompt: string; steps: (LlmStep | SubagentStep | CompactionStep)[] };
+
 export type Scenario = {
   title: string;
-  prompt: string;
   contextBase: { projectRules: number; toolSchemas: number; mentionedFiles: number; messages: number };
-  steps: (LlmStep | SubagentStep)[];
+  turns: ScenarioTurn[];
 };
 
 const u = (input: number, w5: number, read: number, output: number): TokenUsage => ({
@@ -71,11 +82,29 @@ const DIFF = `@@ -41,5 +41,6 @@
  }`;
 
 /** The demo run used by every Phase 2 prototype and by the tests. */
+const TEST_DIFF = `@@ -18,6 +18,17 @@ describe("getSession", () => {
+   it("returns the session for a fresh token", async () => {
+     expect(await getSession(req("fresh"))).toMatchObject({ id: "u_1" });
+   });
++
++  it("throws AuthError when the refresh fails", async () => {
++    vi.mocked(refreshToken).mockResolvedValueOnce(null);
++    await expect(getSession(req("expired"))).rejects.toThrow(AuthError);
++  });
++
++  it("waits for the refresh before reading the session", async () => {
++    vi.mocked(refreshToken).mockImplementationOnce(() => sleep(20).then(() => fresh));
++    expect(await getSession(req("stale"))).toMatchObject({ id: fresh.id });
++  });
+ });`;
+
 export const FIX_FLAKY_AUTH: Scenario = {
   title: "Fix flaky auth test",
-  prompt: "Fix the flaky auth test and get CI green.",
   contextBase: { projectRules: 3_200, toolSchemas: 14_800, mentionedFiles: 2_100, messages: 1_400 },
-  steps: [
+  turns: [
+    {
+      prompt: "Fix the flaky auth test and get CI green.",
+      steps: [
     {
       kind: "llm",
       messageId: "msg_01",
@@ -205,6 +234,70 @@ export const FIX_FLAKY_AUTH: Scenario = {
       usage: u(260, 0, 25_600, 180),
       text: "The session test raced the token refresh. I awaited the refresh, guarded the expired case, and the suite now passes 50 out of 50 runs.",
       ms: 500,
+    },
+      ],
+    },
+    {
+      prompt: "Add a regression test for the expired-token case.",
+      steps: [
+        { kind: "compaction", droppedTokens: 2_600, summaryTokens: 420, ms: 500 },
+        {
+          kind: "llm",
+          messageId: "msg_05",
+          usage: u(640, 2_400, 22_900, 520),
+          thinking: "Two cases: refresh returns null should throw AuthError, and a slow refresh must be awaited. I'll extend the existing describe block.",
+          ms: 800,
+          tools: [
+            {
+              kind: "tool",
+              tool: "Read",
+              spanType: "read",
+              name: "tests/auth/session.test.ts",
+              filePath: "tests/auth/session.test.ts",
+              input: { file_path: "tests/auth/session.test.ts" },
+              output: `import { describe, expect, it, vi } from "vitest";
+import { getSession } from "../../src/auth/session";
+
+describe("getSession", () => {
+  it("returns the session for a fresh token", async () => {
+    expect(await getSession(req("fresh"))).toMatchObject({ id: "u_1" });
+  });
+});`,
+              resultTokens: 980,
+              ms: 110,
+            },
+            {
+              kind: "tool",
+              tool: "Edit",
+              spanType: "edit",
+              name: "tests/auth/session.test.ts",
+              filePath: "tests/auth/session.test.ts",
+              input: { file_path: "tests/auth/session.test.ts", old_string: "});", new_string: "  // 2 new cases\n});" },
+              output: { ok: true },
+              diff: TEST_DIFF,
+              resultTokens: 140,
+              ms: 90,
+            },
+            {
+              kind: "tool",
+              tool: "Bash",
+              spanType: "bash",
+              name: "pnpm test auth",
+              input: { command: "pnpm test auth" },
+              output: "✓ auth/session.test.ts (3 tests) 212ms\n\nTests  3 passed (3)",
+              resultTokens: 120,
+              ms: 900,
+            },
+          ],
+        },
+        {
+          kind: "llm",
+          messageId: "msg_06",
+          usage: u(180, 0, 26_100, 140),
+          text: "Added two regression tests: one for a failed refresh throwing AuthError, one proving the refresh is awaited. All 3 tests pass.",
+          ms: 500,
+        },
+      ],
     },
   ],
 };
