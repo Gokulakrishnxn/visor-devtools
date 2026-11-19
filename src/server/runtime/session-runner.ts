@@ -2,7 +2,7 @@ import { ulid } from "ulid";
 import { VisorEvent, type OverrideDecision } from "@shared/events";
 import { BreakpointQueue } from "../interceptor/breakpoints";
 import { BudgetWatchdog } from "../interceptor/budget";
-import { PolicyEngine } from "../interceptor/policy";
+import { editOutsideWorkspace, PolicyEngine } from "../interceptor/policy";
 import { TriggerEngine, type TriggerAlert } from "../interceptor/triggers";
 import { UsageLedger } from "../telemetry/cost";
 import { PricingRegistry } from "../telemetry/pricing";
@@ -111,7 +111,13 @@ export class SessionRunner {
       const fired = this.triggers.onToolCall(req.toolName, req.input);
       fired.alerts.forEach((a) => alert(a, req.spanId));
       // 3. Policy rules (built-in protections first), unless a trigger already blocked it
-      const verdict = fired.block ? ({ action: "block", rule: fired.block } as const) : this.policy.evaluate({ toolName: req.toolName, input: req.input });
+      let verdict: { action: "allow" } | { action: "pause" | "block"; rule: string } = fired.block
+        ? { action: "block", rule: fired.block }
+        : this.policy.evaluate({ toolName: req.toolName, input: req.input });
+      // Built-in: an edit that would land outside the workspace always waits for you
+      if (verdict.action === "allow" && editOutsideWorkspace(req.toolName, req.input, options.workspacePath)) {
+        verdict = { action: "pause", rule: "outside-workspace" };
+      }
       if (verdict.action === "allow") return { decision: "approved", input: req.input };
       if (verdict.action === "block") {
         this.emit({

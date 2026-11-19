@@ -8,7 +8,7 @@ import { loadConfig } from "@server/config";
 import { openDatabase } from "@server/db/client";
 import { TraceStore } from "@server/db/queries";
 import { TraceRecorder } from "@server/db/recorder";
-import { isWrite, PolicyEngine } from "@server/interceptor/policy";
+import { editOutsideWorkspace, isWrite, PolicyEngine } from "@server/interceptor/policy";
 import { TriggerEngine } from "@server/interceptor/triggers";
 import { MockRuntimeAdapter } from "@server/runtime/mock-adapter";
 import { SessionRunner } from "@server/runtime/session-runner";
@@ -42,6 +42,39 @@ describe("pause toggles", () => {
     expect(p.evaluate({ toolName: "mcp__github__search_code", input: {} }).action).toBe("allow");
     expect(isWrite("mcp:github.search_code", { method: "tools/call", name: "search_code" })).toBe(false);
     expect(isWrite("mcp__slack__send_message", {})).toBe(true);
+  });
+});
+
+describe("edits outside the workspace", () => {
+  it("detects writes that escape the workspace folder", () => {
+    const ws = "/Users/me/visor-tests/site";
+    expect(editOutsideWorkspace("Write", { file_path: "index.html" }, ws)).toBeNull();
+    expect(editOutsideWorkspace("Edit", { file_path: "/Users/me/visor-tests/site/src/a.ts" }, ws)).toBeNull();
+    expect(editOutsideWorkspace("Write", { file_path: "../other/x.html" }, ws)).toBe("/Users/me/visor-tests/other/x.html");
+    expect(editOutsideWorkspace("Edit", { file_path: "/Users/me/.zshrc" }, ws)).toBe("/Users/me/.zshrc");
+    expect(editOutsideWorkspace("Write", { file_path: "/Users/me/visor-tests/site-evil/a" }, ws)).toBe("/Users/me/visor-tests/site-evil/a");
+    expect(editOutsideWorkspace("Read", { file_path: "/etc/hosts" }, ws)).toBeNull(); // only edits
+  });
+
+  it("pauses such an edit in a session even when nothing else would", async () => {
+    // A runtime that makes one absolute-path edit outside the workspace
+    const adapter = {
+      name: "outside",
+      async *run(o: { sessionId: string }, hooks: { onToolUse: (r: unknown) => Promise<unknown> }) {
+        yield* [];
+        await hooks.onToolUse({ sessionId: o.sessionId, turnId: "t1", spanId: "s1", toolName: "Write", input: { file_path: "/tmp/elsewhere.txt", content: "x" } });
+      },
+    };
+    const runner = new SessionRunner({ adapter: adapter as never, validate: false });
+    const paused: string[] = [];
+    runner.subscribe((e) => {
+      if (e.type === "breakpoint.paused") {
+        paused.push(e.rule);
+        queueMicrotask(() => runner.resolveBreakpoint(e.spanId, { decision: "approved" }));
+      }
+    });
+    await runner.run({ ...base, sessionId: "out", workspacePath: "/somewhere/else" });
+    expect(paused).toEqual(["outside-workspace"]);
   });
 });
 
