@@ -1,5 +1,7 @@
 import { accessSync, constants, statSync } from "node:fs";
-import { dirname } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { existsSync } from "node:fs";
+import { loadConfig } from "./config";
 import { DEFAULT_DB_PATH, openDatabase } from "./db/client";
 
 function mode(path: string): string {
@@ -9,7 +11,14 @@ function mode(path: string): string {
 export type DoctorCheck = { pass: boolean; message: string };
 
 /** `vhud doctor`: checks the API key (never printed), ~/.visor permissions and SQLite WAL. */
-export function doctor(dbPath = DEFAULT_DB_PATH, log: (line: string) => void = console.log): boolean {
+/** Whether a command can be started: an absolute path that exists, or a name on PATH. */
+export function commandExists(cmd: string, path = process.env.PATH ?? ""): boolean {
+  if (isAbsolute(cmd)) return existsSync(cmd);
+  const exts = process.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
+  return path.split(delimiter).some((dir) => dir && exts.some((e) => existsSync(join(dir, cmd + e))));
+}
+
+export function doctor(dbPath = DEFAULT_DB_PATH, log: (line: string) => void = console.log, workspacePath = process.cwd()): boolean {
   let ok = true;
   const line = (pass: boolean, msg: string) => {
     if (!pass) ok = false;
@@ -31,6 +40,18 @@ export function doctor(dbPath = DEFAULT_DB_PATH, log: (line: string) => void = c
     accessSync(dbPath, constants.R_OK | constants.W_OK);
   } catch (err) {
     line(false, `SQLite failed to open: ${(err as Error).message}`);
+  }
+
+  // .visor.json and the MCP servers it configures
+  const { config, path, error } = loadConfig(workspacePath);
+  if (error) line(false, `.visor.json is invalid: ${error}`);
+  else line(true, path ? `.visor.json loaded (${config.breakpoints.length} rules, ${config.triggers.length} triggers)` : "No .visor.json in this folder (defaults apply)");
+  for (const [name, server] of Object.entries(config.mcpServers)) {
+    const cmd = typeof server.command === "string" ? server.command : null;
+    const url = typeof server.url === "string" ? server.url : null;
+    if (cmd) line(commandExists(cmd), `MCP ${name}: ${commandExists(cmd) ? "command found" : "command not found"} (${cmd})`);
+    else if (url) line(/^https?:\/\//.test(url), `MCP ${name}: remote server ${url}`);
+    else line(false, `MCP ${name}: needs a "command" or "url"`);
   }
   return ok;
 }

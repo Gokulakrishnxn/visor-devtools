@@ -82,7 +82,7 @@ export function Inspector({
                 <tbody>
                   {model.agents.map((a) => (
                     <tr key={a.spanId ?? "main"} className="cursor-pointer border-t border-white/[0.06] hover:bg-white/[0.03]" onClick={() => a.spanId && onSelect(a.spanId)}>
-                      <td className="max-w-0 truncate py-1.5 pr-2">
+                      <td className="whitespace-nowrap py-1.5 pr-2">
                         <span className={a.spanId ? "text-violet" : "text-foreground"}>{a.name}</span>
                       </td>
                       <td className="py-1.5 text-right text-white/60 tabular">{a.steps}</td>

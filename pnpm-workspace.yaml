@@ -3,6 +3,9 @@ packages:
 
 allowBuilds:
   better-sqlite3: true
+  electron: true
+  # Windows installer helper from electron-builder; we only ship macOS
+  electron-winstaller: false
   esbuild: true
   sharp: false
   unrs-resolver: false

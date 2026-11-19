@@ -77,7 +77,7 @@ export function Sidebar({
 
   return (
     <aside style={{ width }} className={cn("flex h-full shrink-0 flex-col bg-[var(--sidebar)] text-[13.5px]", className)}>
-      <div className="px-4 pb-3 pt-4">
+      <div className="desktop-drag desktop-lights-pad px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
           <span className="text-[17px] font-semibold tracking-[0.2em] text-foreground">
             V<span className="text-indigo">.</span>I<span className="text-indigo">.</span>S<span className="text-indigo">.</span>O<span className="text-indigo">.</span>R

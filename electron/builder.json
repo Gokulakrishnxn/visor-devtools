@@ -1,0 +1,50 @@
+{
+  "$comment": "macOS app packaging (Milestone 3.5). scripts/stage-desktop.mjs copies this into release/app and electron-builder runs there, so only the app's own dependencies ship.",
+  "appId": "com.visor.hud",
+  "productName": "VISOR",
+  "copyright": "Copyright \u00a9 2026 Gokulakrishnan",
+  "directories": {
+    "app": ".",
+    "output": "../dist",
+    "buildResources": "../../electron/resources"
+  },
+  "npmRebuild": true,
+  "files": [
+    "dist-electron/**",
+    "dist/web/**",
+    "drizzle/**",
+    "node_modules/**",
+    "package.json",
+    "!node_modules/@anthropic-ai/claude-agent-sdk-darwin-!(${arch}){,/**}",
+    "!node_modules/@anthropic-ai/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-*{,/**}",
+    "!node_modules/better-sqlite3/prebuilds/!(darwin-${arch}.node)",
+    "!node_modules/better-sqlite3/{deps,src}{,/**}"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node",
+    "node_modules/@anthropic-ai/claude-agent-sdk*/**"
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "arm64",
+          "x64"
+        ]
+      }
+    ],
+    "darkModeSupport": true,
+    "hardenedRuntime": true,
+    "identity": null,
+    "extendInfo": {
+      "CFBundleDisplayName": "V.I.S.O.R."
+    }
+  },
+  "dmg": {
+    "title": "V.I.S.O.R. ${version}",
+    "artifactName": "VISOR-${version}-${arch}.dmg"
+  }
+}
