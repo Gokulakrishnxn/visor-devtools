@@ -1,7 +1,7 @@
 {
   "name": "visor-devtools",
   "version": "0.1.0",
-  "description": "V.I.S.O.R. (Verified Inspection, Spans, Overrides & Runtime) — a local-first harness and live debugger for Claude with span-level tracing, mid-flight overrides, and real-money cost control.",
+  "description": "V.I.S.O.R. (Verified Inspection, Spans, Overrides & Runtime) \u2014 a local-first harness and live debugger for Claude with span-level tracing, mid-flight overrides, and real-money cost control.",
   "license": "MIT",
   "author": "Gokulakrishnan (https://www.gokulakrishnan.dev)",
   "homepage": "https://www.gokulakrishnan.dev/visor-devtools",
@@ -33,7 +33,10 @@
     "db:generate": "drizzle-kit generate",
     "site:dev": "pnpm --filter visor-site dev",
     "site:build": "pnpm --filter visor-site build",
-    "dist:mac": "echo \"Electron .dmg packaging arrives in Milestone 3.5\""
+    "dist:mac": "pnpm build && pnpm build:electron && pnpm desktop:stage && electron-builder --projectDir release/app --mac --publish never",
+    "build:electron": "tsup --config tsup.electron.config.ts",
+    "desktop:stage": "node scripts/stage-desktop.mjs",
+    "desktop": "pnpm build && pnpm build:electron && pnpm desktop:stage && electron release/app"
   },
   "packageManager": "pnpm@12.16.1",
   "dependencies": {
@@ -65,6 +68,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.5",
     "@types/better-sqlite3": "^9.6.0",
@@ -74,6 +78,8 @@
     "@vitejs/plugin-react": "^6.3.0",
     "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.11",
+    "electron": "^45.3.4",
+    "electron-builder": "^26.18.0",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
