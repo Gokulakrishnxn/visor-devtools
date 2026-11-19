@@ -4,6 +4,7 @@ import { ulid } from "ulid";
 import { z } from "zod";
 import { Effort, OverrideDecision, type VisorEvent } from "@shared/events";
 import { parseUsd } from "@shared/money";
+import type { TraceStore } from "./db/queries";
 import type { SessionRunner } from "./runtime/session-runner";
 
 export type AppDeps = {
@@ -12,12 +13,17 @@ export type AppDeps = {
   token: string;
   workspacePath: string;
   defaultModel?: string;
+  defaultEffort?: "low" | "medium" | "high";
+  /** Read side of SQLite: past sessions and offline replay. */
+  store?: TraceStore;
+  /** What the GUI shows about this daemon (runtime, config status). */
+  info?: Record<string, unknown>;
 };
 
 const StartSession = z.object({
   prompt: z.string().max(20_000).default(""),
   modelId: z.string().optional(),
-  effort: Effort.default("medium"),
+  effort: Effort.optional(),
   /** Dollars as text, e.g. "5" or "0.25"; converted to integer µUSD. */
   capUsd: z.string().optional(),
 });
@@ -42,7 +48,7 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5" }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {} }: AppDeps) {
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ ok: true, name: "visor-devtools", runtime: "local" }));
@@ -63,12 +69,21 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const sessionId = ulid();
     // Fire and forget: progress streams over the WebSocket
     runner
-      .run({ sessionId, prompt, workspacePath, modelId: modelId ?? defaultModel, effort, budgetCapMicroUsd: cap })
+      .run({ sessionId, prompt, workspacePath, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
       .catch((err: unknown) => console.error(`[visor] session ${sessionId} failed:`, err));
     return c.json({ sessionId }, 202);
   });
 
-  api.get("/sessions/:id/events", (c) => c.json({ events: runner.events(c.req.param("id")) satisfies VisorEvent[] }));
+  api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, ...info }));
+
+  api.get("/sessions", (c) => c.json({ sessions: store?.listSessions() ?? [] }));
+
+  api.get("/sessions/:id/events", (c) => {
+    const id = c.req.param("id");
+    const live = runner.events(id);
+    const events: VisorEvent[] = live.length ? live : (store?.events(id) ?? []);
+    return c.json({ events });
+  });
 
   api.post("/sessions/:id/stop", (c) => {
     runner.stop(c.req.param("id"));
