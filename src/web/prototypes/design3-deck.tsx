@@ -62,13 +62,16 @@ export function Design3Deck() {
     <div className="flex h-full flex-col bg-background">
       {/* Header */}
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-3">
-        <span className="text-[13px] font-semibold tracking-[0.16em]">V.I.S.O.R.</span>
+        <span className="shrink-0 text-[13px] font-semibold tracking-[0.16em]">V.I.S.O.R.</span>
         <span className="hidden font-mono text-[11px] text-faint md:inline">mission deck</span>
-        <span className="truncate text-[13px] text-muted-foreground">
-          {WORKSPACE.name} / {model.session?.title ?? "…"}
+        <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+          <span className="hidden sm:inline">{WORKSPACE.name} / </span>
+          {model.session?.title ?? "…"}
         </span>
-        <SessionStatus model={model} />
-        <div className="ml-auto flex items-center gap-2">
+        <span className="hidden shrink-0 sm:inline-flex">
+          <SessionStatus model={model} />
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <span className="hidden rounded-md border border-border px-2 py-0.5 text-[11.5px] text-muted-foreground sm:inline">
             {MODEL_LABEL[model.session?.modelId ?? ""] ?? "Opus 5.5"}
           </span>
@@ -76,16 +79,16 @@ export function Design3Deck() {
           <span className="hidden lg:inline-flex">
             <WalletPill model={model} />
           </span>
-          <button type="button" onClick={() => h.ui.setPalette(true)} className="flex h-7 items-center gap-2 rounded-md border border-border px-2 text-[12px] text-faint hover:text-foreground">
-            <Search size={13} /> <Kbd>⌘K</Kbd>
+          <button type="button" aria-label="Search" onClick={() => h.ui.setPalette(true)} className="flex h-7 items-center gap-2 rounded-md border border-border px-2 text-[12px] text-faint hover:text-foreground">
+            <Search size={13} /> <Kbd className="hidden sm:inline">⌘K</Kbd>
           </button>
           {finished ? (
             <button type="button" onClick={() => void h.start()} className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-[12px] hover:bg-white/5">
-              <RotateCcw size={13} /> New run
+              <RotateCcw size={13} /> <span className="hidden sm:inline">New run</span>
             </button>
           ) : (
             <button type="button" onClick={() => void stop()} className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-[12px] hover:bg-white/5">
-              <Square size={13} /> Stop
+              <Square size={13} /> <span className="hidden sm:inline">Stop</span>
             </button>
           )}
         </div>
