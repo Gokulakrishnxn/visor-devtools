@@ -22,6 +22,21 @@ export const PolicyRule = z.object({
 export type PolicyRule = z.infer<typeof PolicyRule>;
 
 export type ToolCall = { toolName: string; input: Record<string, unknown> };
+
+/** GUI switches that add "pause before…" rules on top of the configured ones. */
+export const PauseToggles = z.object({
+  bash: z.boolean().default(false),
+  edits: z.boolean().default(false),
+  mcpWrites: z.boolean().default(false),
+});
+export type PauseToggles = z.infer<typeof PauseToggles>;
+export const NO_PAUSES: PauseToggles = { bash: false, edits: false, mcpWrites: false };
+
+const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+const SHELL_TOOLS = new Set(["Bash", "BashOutput"]);
+
+/** MCP tools are `mcp__server__tool` in the Agent SDK and `mcp:server.tool` in the mock. */
+export const isMcpTool = (name: string) => name.startsWith("mcp__") || name.startsWith("mcp:");
 export type Verdict = { action: "allow" } | { action: "pause" | "block"; rule: string };
 
 /** Always on: secrets are never read, destructive commands always pause. */
@@ -59,6 +74,7 @@ export function globToRegex(glob: string): RegExp {
 
 function toolMatches(pattern: string, toolName: string): boolean {
   if (pattern === "*") return true;
+  if (pattern === "mcp:*" || pattern === "mcp__*" || pattern === "mcp*") return isMcpTool(toolName);
   if (pattern.endsWith("*")) return toolName.startsWith(pattern.slice(0, -1));
   return pattern === toolName;
 }
@@ -68,16 +84,31 @@ function filePathOf(input: Record<string, unknown>): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-function isWrite(input: Record<string, unknown>): boolean {
-  return input.write === true || /create|update|delete|write|insert|merge|push/i.test(String(input.method ?? input.name ?? ""));
+const WRITE_WORDS = /create|update|delete|remove|write|insert|merge|push|put|post|patch|set|send|upload|execute/i;
+
+/** Whether an MCP call changes something: by its tool name, or the method/name in its input. */
+export function isWrite(toolName: string, input: Record<string, unknown>): boolean {
+  const action = toolName.startsWith("mcp__") ? toolName.split("__").slice(2).join("__") : toolName.includes(".") ? toolName.split(".").pop()! : "";
+  return input.write === true || WRITE_WORDS.test(action) || WRITE_WORDS.test(String(input.method === "tools/call" ? (input.name ?? "") : (input.method ?? input.name ?? "")));
 }
 
 export class PolicyEngine {
   private readonly rules: PolicyRule[];
+  private toggles: PauseToggles;
 
-  constructor(userRules: PolicyRule[] = []) {
+  constructor(userRules: PolicyRule[] = [], toggles: PauseToggles = NO_PAUSES) {
     // Built-ins first, so user config can add rules but never skip them
     this.rules = [...BUILT_IN_RULES, ...userRules.map((r) => PolicyRule.parse(r))];
+    this.toggles = { ...toggles };
+  }
+
+  getToggles(): PauseToggles {
+    return { ...this.toggles };
+  }
+
+  setToggles(next: Partial<PauseToggles>): PauseToggles {
+    this.toggles = { ...this.toggles, ...next };
+    return this.getToggles();
   }
 
   evaluate(call: ToolCall): Verdict {
@@ -88,11 +119,16 @@ export class PolicyEngine {
       if (!toolMatches(r.tool, call.toolName)) continue;
       if (r.match && !new RegExp(r.match, "i").test(json)) continue;
       if (r.path && !(file && (globToRegex(r.path).test(file) || globToRegex(`**/${r.path}`).test(file)))) continue;
-      if (r.write && !isWrite(call.input)) continue;
+      if (r.write && !isWrite(call.toolName, call.input)) continue;
       if (!r.match && !r.path && !r.write && r.tool === "*") continue; // a rule must say what it matches
       if (r.action === "block") return { action: "block", rule: r.rule }; // block wins over pause
       paused ??= { action: "pause", rule: r.rule };
     }
-    return paused ?? { action: "allow" };
+    if (paused) return paused;
+    // GUI toggles come last: they only ever add pauses
+    if (this.toggles.bash && SHELL_TOOLS.has(call.toolName)) return { action: "pause", rule: "pause-bash" };
+    if (this.toggles.edits && EDIT_TOOLS.has(call.toolName)) return { action: "pause", rule: "pause-edits" };
+    if (this.toggles.mcpWrites && isMcpTool(call.toolName) && isWrite(call.toolName, call.input)) return { action: "pause", rule: "pause-mcp-writes" };
+    return { action: "allow" };
   }
 }

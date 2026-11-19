@@ -3,6 +3,7 @@ import { ArrowUp, Check, ChevronDown, Plus, ShieldCheck, Square } from "lucide-r
 import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/stores/session-store";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Opus 5.5" },
@@ -10,13 +11,14 @@ export const MODELS = [
   { id: "claude-haiku-4-5", label: "Haiku 4.5" },
 ] as const;
 export const EFFORTS = ["low", "medium", "high"] as const;
+/** Presets over the daemon's pause toggles; secrets are blocked and destructive commands pause in every mode. */
 export const PERMISSIONS = [
-  { id: "ask", label: "Ask before risky tools", hint: "Pause on destructive shell, git and SQL" },
-  { id: "write", label: "Workspace write", hint: "Edits run freely; secrets stay blocked" },
-  { id: "read", label: "Read only", hint: "Pause before every edit or command" },
+  { id: "risky", label: "Ask before risky tools", hint: "Pause only on destructive shell, git and SQL", toggles: { bash: false, edits: false, mcpWrites: false } },
+  { id: "shell", label: "Ask before commands", hint: "Also pause before every shell command", toggles: { bash: true, edits: false, mcpWrites: false } },
+  { id: "every", label: "Ask before every change", hint: "Pause before commands, file edits and MCP writes", toggles: { bash: true, edits: true, mcpWrites: true } },
 ] as const;
 
-export type ComposerValue = { modelId: string; effort: (typeof EFFORTS)[number]; permission: (typeof PERMISSIONS)[number]["id"]; capUsd: string };
+export type ComposerValue = { modelId: string; effort: (typeof EFFORTS)[number]; capUsd: string };
 
 function useOutside(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -49,7 +51,11 @@ export function Composer({
   const permRef = useOutside(menu === "perm", close);
   const modelRef = useOutside(menu === "model", close);
   const running = model.session?.status === "running" || model.session?.status === "paused";
-  const perm = PERMISSIONS.find((p) => p.id === value.permission)!;
+  const toggles = useSession((s) => s.toggles);
+  const setToggles = useSession((s) => s.setToggles);
+  const same = (a: object, b: object | null) => b !== null && JSON.stringify(a) === JSON.stringify(b);
+  const perm = PERMISSIONS.find((p) => same(p.toggles, toggles));
+  const permLabel = perm?.label ?? "Custom pauses";
   const modelLabel = MODELS.find((m) => m.id === value.modelId)?.label ?? value.modelId;
 
   const send = () => {
@@ -82,18 +88,18 @@ export function Composer({
         <div ref={permRef} className="relative">
           <button type="button" onClick={() => setMenu(menu === "perm" ? null : "perm")} className="flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] text-white/70 hover:bg-white/[0.06]" aria-expanded={menu === "perm"}>
             <ShieldCheck size={15} className="text-white/55" />
-            <span className="hidden @[520px]:inline">{perm.label}</span>
+            <span className="hidden @[520px]:inline">{permLabel}</span>
             <ChevronDown size={13} className="text-white/40" />
           </button>
           {menu === "perm" && (
             <div className="absolute bottom-10 left-0 z-30 w-72 rounded-2xl border border-white/10 bg-popover p-1.5 shadow-2xl">
               {PERMISSIONS.map((p) => (
-                <button key={p.id} type="button" onClick={() => (onChange({ ...value, permission: p.id }), close())} className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/[0.06]">
+                <button key={p.id} type="button" onClick={() => (void setToggles(p.toggles), close())} className="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/[0.06]">
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13.5px] text-foreground">{p.label}</span>
                     <span className="block text-[12px] text-white/45">{p.hint}</span>
                   </span>
-                  {p.id === value.permission && <Check size={15} className="mt-0.5 text-indigo" />}
+                  {perm?.id === p.id && <Check size={15} className="mt-0.5 text-indigo" />}
                 </button>
               ))}
             </div>

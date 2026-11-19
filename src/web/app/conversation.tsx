@@ -112,6 +112,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
                 <Step
                   key={span.spanId}
                   span={span}
+                  alerts={model.alerts.filter((a) => a.spanId === span.spanId && !a.id.startsWith("bp-") && !a.id.startsWith("spike-"))}
                   depth={depth}
                   selected={selectedId === span.spanId}
                   onClick={() => {
@@ -144,7 +145,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
   );
 }
 
-function Step({ span, depth, selected, onClick }: { span: TraceSpan; depth: number; selected: boolean; onClick: () => void }) {
+function Step({ span, depth, selected, onClick, alerts }: { span: TraceSpan; depth: number; selected: boolean; onClick: () => void; alerts: TraceModel["alerts"] }) {
   const [open, setOpen] = useState(false);
   const Icon = SPAN_ICON[span.spanType];
   const isFile = span.spanType === "read" || span.spanType === "edit";
@@ -188,6 +189,11 @@ function Step({ span, depth, selected, onClick }: { span: TraceSpan; depth: numb
       </button>
       {failed && span.error && <p className="pb-1 pl-[34px] text-[12.5px] text-rose/90">{span.error}</p>}
       {span.breakpoint?.decision === "edited" && <p className="pb-1 pl-[34px] text-[12.5px] text-amber/90">Edited before it ran</p>}
+      {alerts.map((a) => (
+        <p key={a.id} className={cn("pb-1 pl-[34px] text-[12.5px]", a.level === "danger" ? "text-rose/90" : "text-amber/90")}>
+          {a.title} · <span className="text-white/45">{a.detail}</span>
+        </p>
+      ))}
       <AnimatePresence initial={false}>
         {thinking && open && (
           <motion.p

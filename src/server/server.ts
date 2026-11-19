@@ -14,6 +14,7 @@ import { Wallet } from "./wallet";
 import { loadConfig, resolveRuntime, type RuntimeKind } from "./config";
 import { SessionRunner } from "./runtime/session-runner";
 import { PolicyEngine } from "./interceptor/policy";
+import { TriggerEngine } from "./interceptor/triggers";
 import { PricingRegistry } from "./telemetry/pricing";
 
 export const DEFAULT_PORT = 4310;
@@ -59,7 +60,8 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
       : new MockRuntimeAdapter({ speed: opts.mockSpeed ?? 1, pricing });
   const runner = new SessionRunner({
     adapter,
-    policy: new PolicyEngine(config.breakpoints),
+    policy: new PolicyEngine(config.breakpoints, config.pause),
+    triggers: new TriggerEngine(config.triggers),
     turnCapMicroUsd: config.budget.turnCapUsd ?? null,
     pricing,
     validate: true,
@@ -86,7 +88,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     store: new TraceStore(db),
     wallet,
     defaultCapMicroUsd: config.budget.sessionCapUsd ?? null,
-    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), rules: config.breakpoints.length },
+    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 

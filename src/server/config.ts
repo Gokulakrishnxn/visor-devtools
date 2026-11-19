@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { Effort } from "@shared/events";
 import { parseUsd } from "@shared/money";
-import { PolicyRule } from "./interceptor/policy";
+import { PauseToggles, PolicyRule } from "./interceptor/policy";
+import { Trigger } from "./interceptor/triggers";
 
 const usd = z.union([z.string(), z.number()]).transform((v) => parseUsd(v));
 
@@ -16,6 +17,9 @@ export const VisorConfig = z
       .object({ sessionCapUsd: usd.optional(), turnCapUsd: usd.optional() })
       .default({}),
     breakpoints: z.array(PolicyRule).default([]),
+    // Defaults for the GUI's "pause before…" switches
+    pause: PauseToggles.default({ bash: false, edits: false, mcpWrites: false }),
+    triggers: z.array(Trigger).default([]),
     // Passed straight to the Agent SDK's `mcpServers` option
     mcpServers: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
   })

@@ -8,6 +8,8 @@ type Connection = "idle" | "connecting" | "open" | "closed";
 export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number };
 export type LedgerEntry = { id: string; sessionId: string | null; entryType: "deposit" | "debit" | "adjustment"; amountMicroUsd: number; balanceAfterMicroUsd: number; note: string | null; createdAt: number };
 export type WalletState = { enabled: boolean; active: boolean; balanceMicroUsd: number; entries: LedgerEntry[] };
+export type PauseToggles = { bash: boolean; edits: boolean; mcpWrites: boolean };
+export type AuditEntry = { id: string; sessionId: string; sessionTitle: string | null; spanId: string; toolName: string; matchedRule: string; decision: "approved" | "edited" | "denied" | "auto_blocked"; originalInputJson: string | null; finalInputJson: string | null; operatorNote: string | null; createdAt: number };
 export type StoredSession = { id: string; title: string; workspacePath: string; modelId: string; status: string; totalCostMicroUsd: number; startedAt: number; endedAt: number | null };
 
 type SessionState = {
@@ -23,6 +25,10 @@ type SessionState = {
   info: DaemonInfo | null;
   sessions: StoredSession[];
   wallet: WalletState | null;
+  toggles: PauseToggles | null;
+  audit: AuditEntry[];
+  setToggles: (next: Partial<PauseToggles>) => Promise<void>;
+  refreshAudit: () => Promise<void>;
   refreshWallet: () => Promise<void>;
   /** "deposit" adds credit; "set" makes the balance exactly this amount. Returns an error message or null. */
   changeWallet: (kind: "deposit" | "set", amountUsd: string, note?: string) => Promise<string | null>;
@@ -70,6 +76,8 @@ export const useSession = create<SessionState>((set, get) => ({
   info: null,
   sessions: [],
   wallet: null,
+  toggles: null,
+  audit: [],
 
   connect() {
     const { token, connection } = get();
@@ -82,6 +90,7 @@ export const useSession = create<SessionState>((set, get) => ({
       void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
       void get().refreshSessions();
       void get().refreshWallet();
+      void api<{ toggles: PauseToggles }>(get().token, "/api/policy").then((p) => set({ toggles: p.toggles })).catch(() => undefined);
     };
     ws.onclose = () => {
       set({ connection: "closed" });
@@ -94,7 +103,27 @@ export const useSession = create<SessionState>((set, get) => ({
       set((s) => ({ bySession: { ...s.bySession, [e.sessionId]: [...(s.bySession[e.sessionId] ?? []), e] } }));
       if (e.type === "session.started" || e.type === "session.ended") void get().refreshSessions();
       if (e.type === "session.ended") setTimeout(() => void get().refreshWallet(), 150);
+      if (e.type === "breakpoint.resolved") setTimeout(() => void get().refreshAudit(), 150);
     };
+  },
+
+  async setToggles(next) {
+    const prev = get().toggles;
+    if (prev) set({ toggles: { ...prev, ...next } }); // optimistic
+    try {
+      const { toggles } = await api<{ toggles: PauseToggles }>(get().token, "/api/policy", { method: "PUT", body: JSON.stringify(next) });
+      set({ toggles });
+    } catch {
+      set({ toggles: prev });
+    }
+  },
+
+  async refreshAudit() {
+    try {
+      set({ audit: (await api<{ entries: AuditEntry[] }>(get().token, "/api/audit")).entries });
+    } catch {
+      // the audit view keeps its last list
+    }
   },
 
   async refreshWallet() {
