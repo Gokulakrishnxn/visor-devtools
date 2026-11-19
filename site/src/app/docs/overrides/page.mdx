@@ -45,3 +45,29 @@ const result = await breakpoints.wait({
 <Warning>An auto-blocked call (like reading `.env`) never reaches a breakpoint card. It is denied and logged as `auto_blocked`.</Warning>
 
 Configure your own rules in [`.visor.json`](/docs/configuration).
+
+## Pause switches
+
+In **Overrides & rules** (or the permission chip in the composer) you can also pause before:
+
+- every **shell command**
+- every **file edit** (Edit, MultiEdit, Write, notebook edits)
+- every **MCP write** (tools that create, update, delete or send)
+
+These only add pauses. Secrets stay blocked and destructive commands pause whatever they're set to.
+
+## Triggers and alerts
+
+`.visor.json` `triggers` watch tool calls and token use:
+
+```json
+{
+  "triggers": [
+    { "type": "path", "pattern": "src/billing/", "action": "notify", "label": "billing code" },
+    { "type": "path", "pattern": "\\.env|id_rsa", "action": "block" },
+    { "type": "tokens", "above": 200000 }
+  ]
+}
+```
+
+A `notify` trigger lets the call run and shows an alert under that step; a `block` trigger denies it before any rule runs. Turn on **desktop notifications** to hear about pauses and alerts while you're in another window.
