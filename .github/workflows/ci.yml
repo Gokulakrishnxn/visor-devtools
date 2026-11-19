@@ -5,7 +5,8 @@ on:
   pull_request:
 
 jobs:
-  check:
+  app:
+    name: App (daemon, GUI, tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +18,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test
+        env:
+          ANTHROPIC_API_KEY: ""
       - run: pnpm build
+
+  site:
+    name: Website & docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter visor-site lint
+      - run: pnpm --filter visor-site typecheck
+      - run: pnpm --filter visor-site build
