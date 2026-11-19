@@ -126,6 +126,8 @@ export const VisorEvent = z.discriminatedUnion("type", [
     sessionId: id,
     turnId: id,
     costMicroUsd: micro,
+    /** What V.I.S.O.R. computed from tokens, when the runtime also reported an authoritative total. */
+    computedCostMicroUsd: micro.optional(),
     cacheSavingsMicroUsd: micro,
     contextUsedTokens: tokens,
     contextLimitTokens: tokens,

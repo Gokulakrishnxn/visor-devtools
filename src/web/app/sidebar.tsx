@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
-import { WALLET_BEFORE_MICRO } from "@/lib/mock-data";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 import { useSession, type StoredSession } from "@/stores/session-store";
@@ -38,11 +37,13 @@ export function Sidebar({
   view,
   onView,
   onCollapse,
+  onWallet,
   width = 264,
   className,
 }: {
   model: TraceModel;
   onCollapse?: () => void;
+  onWallet: () => void;
   width?: number;
   onNew: () => void;
   onSearch: () => void;
@@ -54,6 +55,9 @@ export function Sidebar({
   const currentId = useSession((s) => s.sessionId);
   const openSession = useSession((s) => s.open);
   const info = useSession((s) => s.info);
+  const wallet = useSession((s) => s.wallet);
+  const live = info?.runtime === "claude";
+  const spending = live && (model.session?.status === "running" || model.session?.status === "paused") ? model.cost.total : 0;
   const here = folderOf(info?.workspacePath ?? "workspace");
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (name: string) => open[name] ?? name === here;
@@ -150,19 +154,23 @@ export function Sidebar({
         ))}
       </div>
 
-      <div className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-3">
+      <button type="button" onClick={onWallet} className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]" aria-label="Open credit wallet">
         <span className="flex size-8 items-center justify-center rounded-full bg-white/[0.09] text-white/70">
           <Wallet size={15} />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block text-[13px] text-foreground">
-            {info?.runtime === "claude" ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}
-          </span>
+          <span className="block text-[13px] text-foreground">{live ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}</span>
           <span className="block text-[11.5px] text-white/50">
-            <Usd micro={WALLET_BEFORE_MICRO - model.cost.total} decimals={2} /> credit left
+            {wallet?.active ? (
+              <>
+                <Usd micro={Math.max(0, wallet.balanceMicroUsd - spending)} decimals={2} /> credit left
+              </>
+            ) : (
+              "Set up prepaid credit"
+            )}
           </span>
         </span>
-      </div>
+      </button>
     </aside>
   );
 }

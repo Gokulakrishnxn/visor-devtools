@@ -3,7 +3,9 @@ import { formatUsd } from "@shared/money";
 import { BUILT_IN_RULES } from "@server/interceptor/policy";
 import { CostReceipt } from "@/components/visor/cost-receipt";
 import { SPAN_LABEL, StatusDot, Usd, fmtMs } from "@/components/visor/primitives";
-import { LEDGER, MCP_SERVERS, WALLET_BEFORE_MICRO } from "@/lib/mock-data";
+import { MCP_SERVERS } from "@/lib/mock-data";
+import { useSession } from "@/stores/session-store";
+import { LedgerTable } from "./wallet-dialog";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 
@@ -56,11 +58,50 @@ export function McpView() {
   );
 }
 
-export function LedgerView({ model }: { model: TraceModel }) {
+export function LedgerView({ model, onOpenWallet }: { model: TraceModel; onOpenWallet: () => void }) {
+  const wallet = useSession((s) => s.wallet);
+  const exportLedger = useSession((s) => s.exportLedger);
+  const top = Object.values(model.spans)
+    .filter((s) => s.costMicroUsd > 0)
+    .sort((a, b) => b.costMicroUsd - a.costMicroUsd)
+    .slice(0, 5);
   return (
-    <div className="space-y-6">
-      <Header title="Credit ledger" body="Prepaid credit, every debit in integer micro-dollars, exportable as CSV." />
-      <LedgerPane model={model} />
+    <div className="space-y-8">
+      <Header title="Credit ledger" body="Prepaid credit and every live session's debit, in integer micro-dollars. Differences from the SDK's own total are booked as adjustments." />
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-mono text-[28px] font-medium tabular">{formatUsd(wallet?.balanceMicroUsd ?? 0, 2)}</span>
+        <span className="text-[13px] text-white/45">{wallet?.active ? "credit left" : "no credit set"}</span>
+        <span className="ml-auto flex gap-2">
+          <button type="button" onClick={onOpenWallet} className="rounded-lg bg-foreground px-3 py-1.5 text-[13px] font-medium text-[var(--primary-foreground)]">
+            Add or set credit
+          </button>
+          <button type="button" onClick={() => void exportLedger()} className="flex items-center gap-1.5 rounded-lg border border-white/[0.1] px-3 py-1.5 text-[13px] text-white/70 hover:text-foreground">
+            <Download size={13} /> Export CSV
+          </button>
+        </span>
+      </div>
+      <LedgerTable entries={wallet?.entries ?? []} />
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div>
+          <p className="mb-3 text-[12.5px] text-white/45">This session&apos;s receipt</p>
+          <CostReceipt model={model} />
+        </div>
+        <div>
+          <p className="mb-3 text-[12.5px] text-white/45">Most expensive steps</p>
+          {top.length === 0 && <p className="text-[13px] text-white/40">Nothing spent yet.</p>}
+          {top.map((s) => (
+            <div key={s.spanId} className="flex items-center gap-2 py-1 text-[12.5px]">
+              <span className="truncate text-white/65">
+                {SPAN_LABEL[s.spanType]} · turn {model.turns.findIndex((t) => t.turnId === s.turnId) + 1}
+              </span>
+              <span className="relative ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.06]">
+                <span className="absolute inset-y-0 left-0 bg-emerald/70" style={{ width: `${(s.costMicroUsd / (top[0]?.costMicroUsd || 1)) * 100}%` }} />
+              </span>
+              <Usd micro={s.costMicroUsd} className="w-16 text-right font-mono text-emerald/90" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -128,70 +169,6 @@ function OverridesPane({ model, onSelect }: { model: TraceModel; onSelect: (id: 
             <StatusDot status={s.status} /> <span className="font-mono">{s.name}</span>
             <span className="ml-auto font-mono text-[11px] text-faint">{fmtMs(s.endedAt ? s.endedAt - s.startedAt : undefined)}</span>
           </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LedgerPane({ model }: { model: TraceModel }) {
-  const liveRow = { id: "live", type: "debit" as const, amountMicroUsd: -model.cost.total, note: `${model.session?.title ?? "Live session"} (live)`, when: "Now" };
-  const rows = [...LEDGER, liveRow];
-  let balance = 0;
-  const withBalance = rows.map((r) => ({ ...r, balance: (balance += r.amountMicroUsd) }));
-  const csv = () => {
-    const lines = ["when,type,note,amount_micro_usd,balance_after_micro_usd", ...withBalance.map((r) => `${r.when},${r.type},"${r.note.replace(/"/g, '""')}",${r.amountMicroUsd},${r.balance}`)];
-    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "visor-ledger.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-  const top = Object.values(model.spans)
-    .filter((s) => s.costMicroUsd > 0)
-    .sort((a, b) => b.costMicroUsd - a.costMicroUsd)
-    .slice(0, 5);
-  return (
-    <div className="grid gap-6 p-4 xl:grid-cols-2">
-      <CostReceipt model={model} />
-      <div>
-        <div className="mb-2 flex items-center">
-          <p className="text-[12px] text-faint">Credit ledger</p>
-          <button type="button" onClick={csv} className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11.5px] text-muted-foreground hover:text-foreground">
-            <Download size={12} /> Export CSV
-          </button>
-        </div>
-        <table className="w-full font-mono text-[11.5px]">
-          <tbody>
-            {withBalance.map((r) => (
-              <tr key={r.id} className="border-b border-border tabular">
-                <td className="py-1.5 pr-2 text-faint">{r.when}</td>
-                <td className="py-1.5 pr-2 text-muted-foreground">
-                  <span className="block max-w-[200px] truncate" title={r.note}>
-                    {r.note}
-                  </span>
-                </td>
-                <td className={cn("py-1.5 pr-2 text-right", r.amountMicroUsd > 0 ? "text-emerald" : "text-foreground")}>{formatUsd(r.amountMicroUsd)}</td>
-                <td className="py-1.5 text-right text-faint">{formatUsd(r.balance, 2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-2 text-right font-mono text-[11.5px] text-muted-foreground">
-          Balance <Usd micro={WALLET_BEFORE_MICRO - model.cost.total} decimals={2} className="text-foreground" />
-        </p>
-        <p className="mb-2 mt-6 text-[12px] text-faint">Most expensive spans</p>
-        {top.map((s) => (
-          <div key={s.spanId} className="flex items-center gap-2 py-1 text-[12px]">
-            <span className="truncate text-muted-foreground">
-              {SPAN_LABEL[s.spanType]} · {model.turns.findIndex((t) => t.turnId === s.turnId) + 1 ? `turn ${model.turns.findIndex((t) => t.turnId === s.turnId) + 1}` : ""}
-            </span>
-            <span className="relative ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.06]">
-              <span className="absolute inset-y-0 left-0 bg-emerald/70" style={{ width: `${(s.costMicroUsd / (top[0]?.costMicroUsd || 1)) * 100}%` }} />
-            </span>
-            <Usd micro={s.costMicroUsd} className="w-16 text-right font-mono text-emerald/90" />
-          </div>
         ))}
       </div>
     </div>

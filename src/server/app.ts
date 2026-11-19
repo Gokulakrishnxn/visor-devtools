@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Effort, OverrideDecision, type VisorEvent } from "@shared/events";
 import { parseUsd } from "@shared/money";
 import type { TraceStore } from "./db/queries";
+import type { Wallet } from "./wallet";
 import type { SessionRunner } from "./runtime/session-runner";
 
 export type AppDeps = {
@@ -18,7 +19,13 @@ export type AppDeps = {
   store?: TraceStore;
   /** What the GUI shows about this daemon (runtime, config status). */
   info?: Record<string, unknown>;
+  /** Prepaid credit ledger; limits live runs once credit is set. */
+  wallet?: Wallet;
+  /** Cap used when a request doesn't name one (from .visor.json). */
+  defaultCapMicroUsd?: number | null;
 };
+
+const Amount = z.object({ amountUsd: z.string().max(20), note: z.string().max(200).optional() });
 
 const StartSession = z.object({
   prompt: z.string().max(20_000).default(""),
@@ -48,7 +55,7 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {} }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, defaultCapMicroUsd = null }: AppDeps) {
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ ok: true, name: "visor-devtools", runtime: "local" }));
@@ -60,18 +67,21 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const body = StartSession.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: "invalid request", issues: body.error.issues }, 400);
     const { prompt, modelId, effort, capUsd } = body.data;
-    let cap: number | null;
+    let requested: number | null;
     try {
-      cap = capUsd ? parseUsd(capUsd) : null;
+      requested = capUsd ? parseUsd(capUsd) : defaultCapMicroUsd;
     } catch {
       return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
     }
+    // Once you've set credit, a live run can never spend more than what's left
+    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(requested) : { cap: requested, limitedByCredit: false };
+    if (cap === 0 && limitedByCredit) return c.json({ error: "No credit left. Add credit in the wallet to start a live run." }, 402);
     const sessionId = ulid();
     // Fire and forget: progress streams over the WebSocket
     runner
       .run({ sessionId, prompt, workspacePath, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
       .catch((err: unknown) => console.error(`[visor] session ${sessionId} failed:`, err));
-    return c.json({ sessionId }, 202);
+    return c.json({ sessionId, capMicroUsd: cap, limitedByCredit }, 202);
   });
 
   api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, ...info }));
@@ -88,6 +98,54 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
   api.post("/sessions/:id/stop", (c) => {
     runner.stop(c.req.param("id"));
     return c.json({ ok: true });
+  });
+
+  api.get("/wallet", (c) =>
+    c.json(
+      wallet
+        ? { enabled: true, active: wallet.isActive(), balanceMicroUsd: wallet.balance(), entries: wallet.entries() }
+        : { enabled: false, active: false, balanceMicroUsd: 0, entries: [] },
+    ),
+  );
+
+  const money = async (c: { req: { json: () => Promise<unknown> } }) => {
+    const body = Amount.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return { error: "Send { amountUsd: \"20\" }" } as const;
+    try {
+      return { amount: parseUsd(body.data.amountUsd), note: body.data.note } as const;
+    } catch {
+      return { error: "amountUsd must be a dollar amount like 20 or 0.50" } as const;
+    }
+  };
+
+  api.post("/wallet/deposit", async (c) => {
+    if (!wallet) return c.json({ error: "wallet unavailable" }, 404);
+    const m = await money(c);
+    if ("error" in m) return c.json({ error: m.error }, 400);
+    try {
+      return c.json({ entry: wallet.deposit(m.amount, m.note || undefined), balanceMicroUsd: wallet.balance() });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+  });
+
+  api.post("/wallet/balance", async (c) => {
+    if (!wallet) return c.json({ error: "wallet unavailable" }, 404);
+    const m = await money(c);
+    if ("error" in m) return c.json({ error: m.error }, 400);
+    try {
+      return c.json({ entry: wallet.setBalance(m.amount), balanceMicroUsd: wallet.balance() });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+  });
+
+  api.get("/wallet/export.csv", (c) => {
+    if (!wallet) return c.text("", 404);
+    return c.body(wallet.toCsv(), 200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": 'attachment; filename="visor-ledger.csv"',
+    });
   });
 
   api.get("/breakpoints", (c) => c.json({ pending: runner.breakpoints.list(c.req.query("sessionId")) }));

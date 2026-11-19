@@ -6,6 +6,8 @@ import { deriveTrace, type TraceModel } from "@/lib/trace-model";
 type Connection = "idle" | "connecting" | "open" | "closed";
 
 export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number };
+export type LedgerEntry = { id: string; sessionId: string | null; entryType: "deposit" | "debit" | "adjustment"; amountMicroUsd: number; balanceAfterMicroUsd: number; note: string | null; createdAt: number };
+export type WalletState = { enabled: boolean; active: boolean; balanceMicroUsd: number; entries: LedgerEntry[] };
 export type StoredSession = { id: string; title: string; workspacePath: string; modelId: string; status: string; totalCostMicroUsd: number; startedAt: number; endedAt: number | null };
 
 type SessionState = {
@@ -20,6 +22,11 @@ type SessionState = {
   error: string | null;
   info: DaemonInfo | null;
   sessions: StoredSession[];
+  wallet: WalletState | null;
+  refreshWallet: () => Promise<void>;
+  /** "deposit" adds credit; "set" makes the balance exactly this amount. Returns an error message or null. */
+  changeWallet: (kind: "deposit" | "set", amountUsd: string, note?: string) => Promise<string | null>;
+  exportLedger: () => Promise<void>;
   connect: () => void;
   refreshSessions: () => Promise<void>;
   /** Open a stored session: its events load from SQLite and replay instantly. */
@@ -62,6 +69,7 @@ export const useSession = create<SessionState>((set, get) => ({
   error: null,
   info: null,
   sessions: [],
+  wallet: null,
 
   connect() {
     const { token, connection } = get();
@@ -73,6 +81,7 @@ export const useSession = create<SessionState>((set, get) => ({
       set({ connection: "open", error: null });
       void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
       void get().refreshSessions();
+      void get().refreshWallet();
     };
     ws.onclose = () => {
       set({ connection: "closed" });
@@ -84,7 +93,38 @@ export const useSession = create<SessionState>((set, get) => ({
       const e = parsed.data;
       set((s) => ({ bySession: { ...s.bySession, [e.sessionId]: [...(s.bySession[e.sessionId] ?? []), e] } }));
       if (e.type === "session.started" || e.type === "session.ended") void get().refreshSessions();
+      if (e.type === "session.ended") setTimeout(() => void get().refreshWallet(), 150);
     };
+  },
+
+  async refreshWallet() {
+    try {
+      set({ wallet: await api<WalletState>(get().token, "/api/wallet") });
+    } catch {
+      // keep the last known wallet
+    }
+  },
+
+  async changeWallet(kind, amountUsd, note) {
+    const res = await fetch(kind === "deposit" ? "/api/wallet/deposit" : "/api/wallet/balance", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${get().token}` },
+      body: JSON.stringify({ amountUsd: amountUsd.trim().replace(/^\$/, ""), note }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) return body.error ?? "Something went wrong";
+    await get().refreshWallet();
+    return null;
+  },
+
+  async exportLedger() {
+    const res = await fetch("/api/wallet/export.csv", { headers: { authorization: `Bearer ${get().token}` } });
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `visor-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   async refreshSessions() {
@@ -113,7 +153,14 @@ export const useSession = create<SessionState>((set, get) => ({
       });
       set({ sessionId, cursor: null, selectedSpanId: null, error: null });
     } catch (err) {
-      set({ error: (err as Error).message });
+      const text = (err as Error).message.replace(/^\d+ /, "");
+      let message = text;
+      try {
+        message = (JSON.parse(text) as { error?: string }).error ?? text;
+      } catch {
+        // plain text error
+      }
+      set({ error: message });
     }
   },
 
