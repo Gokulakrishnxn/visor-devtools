@@ -70,7 +70,9 @@ export type TraceModel = {
 };
 
 const ZERO_COST: CostBreakdown = { input: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, output: 0, total: 0, cacheSavings: 0 };
-const HIGH_TOKEN_SPIKE = 25_000;
+/** A call whose prompt grows this much (×1.2) over the previous one, above 10k tokens, is a spike. */
+const SPIKE_RATIO_PCT = 120;
+const SPIKE_MIN_TOKENS = 10_000;
 
 export const EMPTY_MODEL: TraceModel = {
   session: null,
@@ -102,6 +104,7 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
   const m: TraceModel = { ...EMPTY_MODEL, turns: [], spans: {}, order: [], alerts: [], contextHistory: [] };
   const seen = new Set<string>();
   let compactedThisTurn = false;
+  let lastPromptTokens = 0;
 
   for (const e of events) {
     m.firstAt ||= e.at;
@@ -165,8 +168,10 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
         const price = DEFAULT_PRICING[e.modelId] ?? DEFAULT_PRICING["claude-opus-5-5"]!;
         m.cost = addCost(m.cost, computeCost(e.usage, price));
         const promptTokens = e.usage.inputTokens + e.usage.cacheReadTokens + e.usage.cacheWrite5mTokens + e.usage.cacheWrite1hTokens;
-        if (promptTokens >= HIGH_TOKEN_SPIKE)
-          m.alerts.push({ id: `spike-${e.messageId}`, level: "warning", title: "High-token prompt", detail: `${promptTokens.toLocaleString("en-US")} tokens sent in one call`, at: e.at, spanId: e.spanId });
+        const spike = lastPromptTokens > 0 && promptTokens >= SPIKE_MIN_TOKENS && promptTokens * 100 >= lastPromptTokens * SPIKE_RATIO_PCT;
+        lastPromptTokens = promptTokens;
+        if (spike)
+          m.alerts.push({ id: `spike-${e.messageId}`, level: "warning", title: "Token spike", detail: `${promptTokens.toLocaleString("en-US")} prompt tokens, up from the previous call`, at: e.at, spanId: e.spanId });
         const cap = m.session?.capMicroUsd;
         if (cap && m.cost.total * 5 >= cap * 4 && !m.alerts.some((a) => a.id === "budget-80"))
           m.alerts.push({ id: "budget-80", level: "warning", title: "Budget at 80%", detail: "The session is close to its hard cap.", at: e.at });
