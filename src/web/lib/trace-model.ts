@@ -207,6 +207,9 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
         }
         break;
       }
+      case "alert":
+        m.alerts.push({ id: `alert-${m.alerts.length}-${e.at}`, level: e.level, title: e.title, detail: `${e.detail} · ${e.source}`, at: e.at, spanId: e.spanId });
+        break;
       case "session.ended":
         if (m.session) m.session = { ...m.session, status: e.status };
         m.paused = null;

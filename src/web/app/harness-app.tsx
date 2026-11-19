@@ -5,6 +5,7 @@ import { formatUsd } from "@shared/money";
 import { CommandPalette } from "@/components/visor/command-palette";
 import { Kbd } from "@/components/visor/primitives";
 import { useHarness } from "@/hooks/use-harness";
+import { useDesktopNotifications } from "@/hooks/use-notifications";
 import { useSession } from "@/stores/session-store";
 import { cn } from "@/lib/utils";
 import { Composer, type ComposerValue } from "./composer";
@@ -38,6 +39,7 @@ export function HarnessApp() {
     },
   });
   const { model } = h;
+  useDesktopNotifications(model);
   const stop = useSession((s) => s.stop);
   const info = useSession((s) => s.info);
   const clearSession = useSession((s) => s.clear);
@@ -49,7 +51,7 @@ export function HarnessApp() {
   const [drawer, setDrawer] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const startError = useSession((s) => s.error);
-  const [composer, setComposer] = useState<ComposerValue>({ modelId: "claude-opus-5-5", effort: "medium", permission: "ask", capUsd: "5" });
+  const [composer, setComposer] = useState<ComposerValue>({ modelId: "claude-opus-5-5", effort: "medium", capUsd: "5" });
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const spanCount = model.order.length;

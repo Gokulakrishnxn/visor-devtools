@@ -4,6 +4,8 @@ import { BUILT_IN_RULES } from "@server/interceptor/policy";
 import { CostReceipt } from "@/components/visor/cost-receipt";
 import { SPAN_LABEL, StatusDot, Usd, fmtMs } from "@/components/visor/primitives";
 import { MCP_SERVERS } from "@/lib/mock-data";
+import { useEffect } from "react";
+import { useNotificationPref } from "@/hooks/use-notifications";
 import { useSession } from "@/stores/session-store";
 import { LedgerTable } from "./wallet-dialog";
 import type { TraceModel } from "@/lib/trace-model";
@@ -14,7 +16,8 @@ import { cn } from "@/lib/utils";
 export function RulesView({ model, onSelect }: { model: TraceModel; onSelect: (id: string) => void }) {
   return (
     <div className="space-y-8">
-      <Header title="Overrides & rules" body="Built-in protections run in the PreToolUse hook before any allow rule. Add your own in .visor.json." />
+      <Header title="Overrides & rules" body="Built-in protections run in the PreToolUse hook before any allow rule. Add your own rules and triggers in .visor.json." />
+      <PauseSwitches />
       <div className="overflow-hidden rounded-2xl border border-white/[0.08]">
         <table className="w-full text-[13px]">
           <thead className="bg-white/[0.03] text-left text-[11.5px] text-white/45">
@@ -36,6 +39,88 @@ export function RulesView({ model, onSelect }: { model: TraceModel; onSelect: (i
         </table>
       </div>
       <OverridesPane model={model} onSelect={onSelect} />
+      <AuditLog />
+    </div>
+  );
+}
+
+function Switch({ on, onChange, label, hint, disabled }: { on: boolean; onChange: () => void; label: string; hint: string; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} disabled={disabled} onClick={onChange} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-white/[0.02] disabled:opacity-50">
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13.5px]">{label}</span>
+        <span className="block text-[12px] text-white/45">{hint}</span>
+      </span>
+      <span className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", on ? "bg-indigo" : "bg-white/[0.12]")}>
+        <span className={cn("absolute top-0.5 size-4 rounded-full bg-white transition-[left]", on ? "left-[18px]" : "left-0.5")} />
+      </span>
+    </button>
+  );
+}
+
+function PauseSwitches() {
+  const toggles = useSession((s) => s.toggles);
+  const setToggles = useSession((s) => s.setToggles);
+  const notify = useNotificationPref();
+  if (!toggles) return null;
+  return (
+    <div>
+      <p className="mb-2 text-[12.5px] text-white/45">Pause before…</p>
+      <div className="divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08]">
+        <Switch on={toggles.bash} onChange={() => void setToggles({ bash: !toggles.bash })} label="Shell commands" hint="Every Bash call waits for Approve / Edit JSON / Deny" />
+        <Switch on={toggles.edits} onChange={() => void setToggles({ edits: !toggles.edits })} label="File edits" hint="Edit, MultiEdit, Write and notebook edits" />
+        <Switch on={toggles.mcpWrites} onChange={() => void setToggles({ mcpWrites: !toggles.mcpWrites })} label="MCP writes" hint="MCP tools that create, update, delete or send" />
+        <Switch
+          on={notify.on}
+          onChange={() => void notify.toggle()}
+          disabled={!notify.supported || notify.denied}
+          label="Desktop notifications"
+          hint={notify.denied ? "Blocked in this browser's site settings" : "Notify when a run pauses or an alert fires while you're in another window"}
+        />
+      </div>
+      <p className="mt-2 text-[12px] text-white/40">Secrets stay blocked and destructive commands still pause whatever these are set to.</p>
+    </div>
+  );
+}
+
+const DECISION_TONE = { approved: "text-emerald", edited: "text-amber", denied: "text-rose", auto_blocked: "text-rose" } as const;
+
+function AuditLog() {
+  const audit = useSession((s) => s.audit);
+  const refresh = useSession((s) => s.refreshAudit);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return (
+    <div>
+      <p className="mb-2 text-[12.5px] text-white/45">Audit log · every session</p>
+      {audit.length === 0 ? (
+        <p className="text-[13px] text-white/40">No decisions recorded yet.</p>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08]">
+          {audit.map((a) => {
+            const edited = a.decision === "edited" && a.finalInputJson;
+            return (
+              <div key={a.id} className="border-t border-white/[0.06] px-4 py-2.5 first:border-t-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                  <span className={cn("font-medium capitalize", DECISION_TONE[a.decision])}>{a.decision.replace("_", " ")}</span>
+                  <span className="text-foreground">{a.toolName}</span>
+                  <span className="font-mono text-[11.5px] text-white/45">{a.matchedRule}</span>
+                  <span className="ml-auto truncate text-[11.5px] text-white/40">
+                    {a.sessionTitle ?? a.sessionId} · {new Date(a.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                {a.operatorNote && <p className="mt-1 text-[12px] text-white/55">“{a.operatorNote}”</p>}
+                {edited && (
+                  <p className="mt-1 truncate font-mono text-[11.5px]">
+                    <span className="text-rose/80 line-through">{a.originalInputJson}</span> <span className="text-white/35">→</span> <span className="text-emerald/90">{a.finalInputJson}</span>
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -138,7 +223,7 @@ function OverridesPane({ model, onSelect }: { model: TraceModel; onSelect: (id: 
             </li>
           ))}
         </ul>
-        <p className="mb-2 mt-6 text-[12px] text-faint">Policy audit log</p>
+        <p className="mb-2 mt-6 text-[12px] text-faint">This session&apos;s overrides</p>
         {overrides.length === 0 && <p className="text-[12.5px] text-faint">No overrides yet.</p>}
         {overrides.map((s) => (
           <div key={s.spanId} className="mb-1.5 flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-2 font-mono text-[11.5px]">
