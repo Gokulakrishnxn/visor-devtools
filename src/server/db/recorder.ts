@@ -17,6 +17,8 @@ export class TraceRecorder {
   /** Per-turn token totals, de-duplicated by message ID. */
   private readonly usage = new Map<string, UsageLedger>();
 
+  /** Streamed text per open span, written to spans.text_content when it ends. */
+  private readonly texts = new Map<string, string>();
   /** Next sequence number per session for the raw event log. */
   private readonly seq = new Map<string, number>();
 
@@ -84,11 +86,13 @@ export class TraceRecorder {
             diffText: e.diff ?? null,
             errorMessage: e.error ?? null,
             costMicroUsd: e.costMicroUsd,
+            textContent: this.texts.get(e.spanId) ?? null,
             latencyMs: row ? e.at - row.startedAt : null,
             endedAt: e.at,
           })
           .where(eq(spans.id, e.spanId))
           .run();
+        this.texts.delete(e.spanId);
         break;
       }
       case "breakpoint.paused":
@@ -155,7 +159,7 @@ export class TraceRecorder {
         // Kept in the raw event log only
         break;
       case "span.delta":
-        // Streamed text lives in the live stream; the final output is stored on span.ended.
+        this.texts.set(e.spanId, (this.texts.get(e.spanId) ?? "") + e.text);
         break;
     }
   }

@@ -66,6 +66,8 @@ export const spans = sqliteTable(
     inputJson: text("input_json"),
     outputJson: text("output_json"),
     diffText: text("diff_text"),
+    /** Full streamed text (thinking, model text, stdout), for search. */
+    textContent: text("text_content"),
     errorMessage: text("error_message"),
     costMicroUsd: integer("cost_micro_usd").notNull().default(0),
     latencyMs: integer("latency_ms"),

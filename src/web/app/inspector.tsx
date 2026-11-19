@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { CompactionTimeline, ContextSummary } from "@/components/visor/context-panel";
 import { CostReceipt } from "@/components/visor/cost-receipt";
 import { Payload } from "@/components/visor/payload";
+import { Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
 import { ReplayBar, Waterfall } from "@/components/visor/waterfall";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
@@ -64,8 +65,37 @@ export function Inspector({
           </div>
         )}
         {tab === "cost" && (
-          <div className="p-4">
+          <div className="space-y-6 p-4">
             <CostReceipt model={model} />
+            <div>
+              <p className="mb-2 text-[12px] text-white/45">By agent</p>
+              <table className="w-full text-[12.5px]">
+                <thead className="text-left text-[11px] text-white/40">
+                  <tr>
+                    <th className="py-1 font-normal">Agent</th>
+                    <th className="py-1 text-right font-normal">Steps</th>
+                    <th className="py-1 text-right font-normal">Tokens</th>
+                    <th className="py-1 text-right font-normal">Time</th>
+                    <th className="py-1 text-right font-normal">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.agents.map((a) => (
+                    <tr key={a.spanId ?? "main"} className="cursor-pointer border-t border-white/[0.06] hover:bg-white/[0.03]" onClick={() => a.spanId && onSelect(a.spanId)}>
+                      <td className="max-w-0 truncate py-1.5 pr-2">
+                        <span className={a.spanId ? "text-violet" : "text-foreground"}>{a.name}</span>
+                      </td>
+                      <td className="py-1.5 text-right text-white/60 tabular">{a.steps}</td>
+                      <td className="py-1.5 text-right font-mono text-white/60 tabular">{fmtTokens(a.tokens)}</td>
+                      <td className="py-1.5 text-right font-mono text-white/60 tabular">{fmtMs(a.durationMs)}</td>
+                      <td className="py-1.5 text-right font-mono tabular">
+                        <Usd micro={a.costMicroUsd} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         {tab === "timeline" && (

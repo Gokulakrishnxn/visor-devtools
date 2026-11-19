@@ -157,6 +157,8 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ toggles: runner.policy.setToggles(body.data) });
   });
 
+  api.get("/search", (c) => c.json({ hits: store?.search(String(c.req.query("q") ?? "").slice(0, 200)) ?? [] }));
+
   api.get("/audit", (c) => c.json({ entries: store?.audit() ?? [] }));
 
   api.get("/breakpoints", (c) => c.json({ pending: runner.breakpoints.list(c.req.query("sessionId")) }));

@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import { Command } from "cmdk";
 import { AlertTriangle, History, Play, Search, Square } from "lucide-react";
-import { PAST_SESSIONS } from "@/lib/mock-data";
 import type { TraceModel } from "@/lib/trace-model";
 import { useSession } from "@/stores/session-store";
 import { useUi } from "@/stores/ui-store";
@@ -15,12 +15,43 @@ function snippet(text: string, n = 70) {
 }
 
 /** ⌘K: search sessions, file paths, thinking, tool output and alerts. */
+type Hit = { sessionId: string; sessionTitle: string; spanId: string | null; kind: string; label: string; snippet: string; at: number };
+
 export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onSelectSpan: (spanId: string) => void }) {
   const open = useUi((s) => s.paletteOpen);
   const setOpen = useUi((s) => s.setPalette);
   const start = useSession((s) => s.start);
   const stop = useSession((s) => s.stop);
+  const token = useSession((s) => s.token);
+  const sessions = useSession((s) => s.sessions);
+  const currentId = useSession((s) => s.sessionId);
+  const openSession = useSession((s) => s.open);
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
   const close = () => setOpen(false);
+
+  // Search every stored session on the daemon as you type
+  useEffect(() => {
+    if (!open || query.trim().length < 2) return;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, { headers: { authorization: `Bearer ${token}` }, signal: ctrl.signal })
+        .then((r) => r.json() as Promise<{ hits: Hit[] }>)
+        .then((r) => setHits(r.hits.filter((h) => h.sessionId !== currentId)))
+        .catch(() => undefined);
+    }, 180);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [open, query, token, currentId]);
+  const shownHits = query.trim().length >= 2 ? hits : [];
+
+  const jump = async (sessionId: string, spanId: string | null) => {
+    close();
+    await openSession(sessionId);
+    if (spanId) setTimeout(() => onSelectSpan(spanId), 50);
+  };
 
   return (
     <Command.Dialog
@@ -32,7 +63,13 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
     >
       <div className="flex items-center gap-2 border-b border-border px-4">
         <Search size={16} className="text-faint" />
-        <Command.Input autoFocus placeholder="Search spans, files, thinking, outputs, alerts…" className="h-12 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint" />
+        <Command.Input
+          autoFocus
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search every session: files, thinking, outputs, errors, prompts…"
+          className="h-12 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
+        />
         <kbd className="rounded border border-border-strong px-1.5 font-mono text-[10px] text-faint">esc</kbd>
       </div>
       <Command.List className="max-h-[60vh] overflow-y-auto p-2">
@@ -87,14 +124,32 @@ export function CommandPalette({ model, onSelectSpan }: { model: TraceModel; onS
           </Command.Group>
         )}
 
-        <Command.Group heading="Sessions" className={group}>
-          {PAST_SESSIONS.map((s) => (
-            <Command.Item key={s.id} className={item} value={`session ${s.title}`} onSelect={close}>
-              <History size={14} className="text-faint" /> {s.title}
-              <span className="ml-auto text-[11px] text-faint">{s.when}</span>
-            </Command.Item>
-          ))}
-        </Command.Group>
+        {shownHits.length > 0 && (
+          <Command.Group heading="Other sessions" className={group}>
+            {shownHits.map((h, i) => (
+              <Command.Item key={`${h.sessionId}-${h.spanId ?? "p"}-${i}`} className={item} value={`${query} ${h.snippet} ${h.sessionTitle} ${i}`} onSelect={() => void jump(h.sessionId, h.spanId)}>
+                <History size={14} className="shrink-0 text-faint" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-foreground">
+                    {h.kind === "prompt" ? "Prompt" : h.label} <span className="text-[11.5px] text-faint">· {h.sessionTitle}</span>
+                  </span>
+                  <span className="block truncate text-[11.5px] text-faint">{h.snippet}</span>
+                </span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+
+        {sessions.length > 0 && (
+          <Command.Group heading="Sessions" className={group}>
+            {sessions.slice(0, 12).map((s) => (
+              <Command.Item key={s.id} className={item} value={`session ${s.title} ${s.id}`} onSelect={() => void jump(s.id, null)}>
+                <History size={14} className="text-faint" /> <span className="truncate">{s.title}</span>
+                <span className="ml-auto shrink-0 text-[11px] text-faint">{new Date(s.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
       </Command.List>
     </Command.Dialog>
   );

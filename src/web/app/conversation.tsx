@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, ChevronUp, FileCode2, FileJson2, FileText as FileTextIcon } from "lucide-react";
 import { BreakpointCard } from "@/components/visor/breakpoint-card";
 import { diffStats } from "@/components/visor/code";
-import { SPAN_ICON, StatusDot, Usd, fmtMs } from "@/components/visor/primitives";
+import { SPAN_ICON, StatusDot, Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
 import type { TraceModel, TraceSpan, TraceTurn } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +113,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
                   key={span.spanId}
                   span={span}
                   alerts={model.alerts.filter((a) => a.spanId === span.spanId && !a.id.startsWith("bp-") && !a.id.startsWith("spike-"))}
+                  agent={span.spanType === "subagent" ? model.agents.find((a) => a.spanId === span.spanId) : undefined}
                   depth={depth}
                   selected={selectedId === span.spanId}
                   onClick={() => {
@@ -145,7 +146,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
   );
 }
 
-function Step({ span, depth, selected, onClick, alerts }: { span: TraceSpan; depth: number; selected: boolean; onClick: () => void; alerts: TraceModel["alerts"] }) {
+function Step({ span, depth, selected, onClick, alerts, agent }: { span: TraceSpan; depth: number; selected: boolean; onClick: () => void; alerts: TraceModel["alerts"]; agent?: TraceModel["agents"][number] }) {
   const [open, setOpen] = useState(false);
   const Icon = SPAN_ICON[span.spanType];
   const isFile = span.spanType === "read" || span.spanType === "edit";
@@ -177,6 +178,11 @@ function Step({ span, depth, selected, onClick, alerts }: { span: TraceSpan; dep
         >
           {thinking ? span.text || "…" : span.name}
         </span>
+        {agent && (
+          <span className="shrink-0 text-[12.5px] text-white/40 tabular">
+            {agent.steps} steps · {fmtTokens(agent.tokens)} tok · <Usd micro={agent.costMicroUsd} />
+          </span>
+        )}
         {stats && (
           <span className="shrink-0 text-[13px] text-white/40 tabular">
             +{stats.added} −{stats.removed}

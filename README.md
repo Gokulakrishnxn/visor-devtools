@@ -60,6 +60,9 @@ You need Claude credentials (`ANTHROPIC_API_KEY`, or a profile from `ant auth lo
 - **Prepaid credit:** open the wallet (bottom of the sidebar) to add credit or set a balance. Once credit is set, a live run's cap shrinks to what's left, and a run is refused at $0. Each live session is debited when it ends; any difference from the SDK's `total_cost_usd` is booked as a visible adjustment. Export the ledger as CSV any time. Mock runs never use credit.
 - **Pause switches:** in *Overrides & rules* (or the composer's permission chip) pause before every shell command, file edit, or MCP write. Secrets stay blocked and destructive commands still pause either way. `.visor.json` `pause` sets their defaults.
 - **Triggers:** `.visor.json` `triggers` raise alerts or block by regex on file paths, commands and URLs, and warn when one call sends more than N prompt tokens. Alerts show under the step that caused them, and as desktop notifications if you turn those on.
+- **Real context and thinking:** live runs ask the SDK for its actual context report at the end of each turn (system prompt + CLAUDE.md, tool and MCP schemas, messages) and use its real thinking-token counts; estimates are only a fallback.
+- **Per-agent totals:** each subagent shows its own steps, tokens, time and cost in the step list and the Inspector's Cost tab.
+- **Search everything:** ⌘K searches every saved session (file paths, thinking, outputs, errors, prompts) and jumps straight to the step.
 - **Audit log:** every Approve / Edit JSON / Deny / auto-block is recorded with the original and final payload and your note, across sessions.
 - **Caps in `.visor.json`:** `budget.sessionCapUsd` is the default cap, `budget.turnCapUsd` stops any single turn that goes over.
 
