@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Wallet } from "lucide-react";
+import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
 import { PAST_SESSIONS, WALLET_BEFORE_MICRO, WORKSPACE } from "@/lib/mock-data";
 import type { TraceModel } from "@/lib/trace-model";
@@ -23,9 +23,13 @@ export function Sidebar({
   onSearch,
   view,
   onView,
+  onCollapse,
+  width = 264,
   className,
 }: {
   model: TraceModel;
+  onCollapse?: () => void;
+  width?: number;
   onNew: () => void;
   onSearch: () => void;
   view: SidebarView;
@@ -43,7 +47,7 @@ export function Sidebar({
   ];
 
   return (
-    <aside className={cn("flex w-[264px] shrink-0 flex-col bg-[var(--sidebar)] text-[13.5px]", className)}>
+    <aside style={{ width }} className={cn("flex h-full shrink-0 flex-col bg-[var(--sidebar)] text-[13.5px]", className)}>
       <div className="px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
           <span className="text-[17px] font-semibold tracking-[0.2em] text-foreground">
@@ -51,6 +55,11 @@ export function Sidebar({
             <span className="text-indigo">.</span>
           </span>
           <span className="rounded border border-white/25 px-1 font-mono text-[9.5px] uppercase leading-4 tracking-wider text-white/70">Harness</span>
+          {onCollapse && (
+            <button type="button" onClick={onCollapse} aria-label="Collapse sidebar (⌘B)" title="Collapse sidebar (⌘B)" className="ml-auto rounded-md p-1 text-white/45 hover:bg-white/[0.08] hover:text-foreground">
+              <PanelLeftClose size={16} />
+            </button>
+          )}
         </div>
         <button
           type="button"

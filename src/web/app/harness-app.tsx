@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Menu, PanelRight, Search } from "lucide-react";
+import { Maximize2, Menu, Minimize2, PanelLeftOpen, PanelRight, Search } from "lucide-react";
 import { formatUsd } from "@shared/money";
 import { CommandPalette } from "@/components/visor/command-palette";
 import { Kbd } from "@/components/visor/primitives";
@@ -11,6 +11,7 @@ import { Composer, type ComposerValue } from "./composer";
 import { Conversation } from "./conversation";
 import { Inspector, type InspectorTab } from "./inspector";
 import { NoToken } from "./no-token";
+import { Resizer, usePref } from "./resizer";
 import { ReviewPanel } from "./review-panel";
 import { LedgerView, McpView, RulesView } from "./side-views";
 import { Sidebar, type SidebarView } from "./sidebar";
@@ -23,7 +24,18 @@ type RightPanel = { kind: "inspector" } | { kind: "review"; turnId: string; span
  * composer, and a right panel for Review (diffs) or the Inspector.
  */
 export function HarnessApp() {
-  const h = useHarness();
+  const [sidebarOpen, setSidebarOpen] = usePref("sidebar-open", true);
+  const [sidebarWidth, setSidebarWidth] = usePref("sidebar-width", 264);
+  const [panelWidth, setPanelWidth] = usePref("panel-width", 420);
+  const [reviewWidth, setReviewWidth] = usePref("review-width", 560);
+  // Full view hides both side panels and remembers what to bring back
+  const [restore, setRestore] = useState<{ sidebar: boolean; panel: RightPanel } | null>(null);
+  const h = useHarness({
+    extraKeys: {
+      "mod+b": () => setSidebarOpen(!sidebarOpen),
+      "mod+.": () => toggleFull(),
+    },
+  });
   const { model } = h;
   const stop = useSession((s) => s.stop);
   const [view, setView] = useState<SidebarView>("chat");
@@ -42,6 +54,19 @@ export function HarnessApp() {
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [spanCount, model.paused, model.turns.length]);
 
+  const full = restore !== null;
+  function toggleFull() {
+    if (restore) {
+      setSidebarOpen(restore.sidebar);
+      setPanel(restore.panel);
+      setRestore(null);
+    } else {
+      setRestore({ sidebar: sidebarOpen, panel });
+      setSidebarOpen(false);
+      setPanel(null);
+    }
+  }
+
   if (!h.token) return <NoToken />;
 
   const cache = model.usage.cacheReadTokens + model.usage.inputTokens;
@@ -58,6 +83,8 @@ export function HarnessApp() {
   const sidebar = (
     <Sidebar
       model={model}
+      width={drawer ? 284 : sidebarWidth}
+      onCollapse={drawer ? () => setDrawer(false) : () => (setSidebarOpen(false), setRestore(null))}
       view={view}
       onView={(v) => (setView(v), setDrawer(false))}
       onNew={() => (setView("chat"), setDrawer(false), void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort }))}
@@ -74,7 +101,12 @@ export function HarnessApp() {
 
   return (
     <div className="flex h-full bg-[var(--canvas)]">
-      <div className="hidden md:flex">{sidebar}</div>
+      {sidebarOpen && (
+        <div className="relative hidden md:flex">
+          {sidebar}
+          <Resizer side="right" width={sidebarWidth} min={208} max={420} reset={264} onWidth={setSidebarWidth} label="Resize sidebar" />
+        </div>
+      )}
 
       <AnimatePresence>
         {drawer && (
@@ -92,6 +124,17 @@ export function HarnessApp() {
           <button type="button" aria-label="Open sidebar" onClick={() => setDrawer(true)} className="rounded-md p-1 text-white/60 hover:text-foreground md:hidden">
             <Menu size={18} />
           </button>
+          {!sidebarOpen && (
+            <button
+              type="button"
+              aria-label="Show sidebar (⌘B)"
+              title="Show sidebar (⌘B)"
+              onClick={() => (setSidebarOpen(true), setRestore(null))}
+              className="hidden rounded-md p-1 text-white/60 hover:bg-white/[0.06] hover:text-foreground md:block"
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+          )}
           <h1 className="min-w-0 truncate text-[15px] text-foreground">{view === "chat" ? (model.session?.title ?? "New session") : { rules: "Overrides & rules", mcp: "MCP servers", ledger: "Credit ledger" }[view]}</h1>
           <span className="ml-auto hidden items-center gap-2 font-mono text-[12px] text-white/45 sm:flex">
             <span className="text-emerald/85" title="Session cost">
@@ -104,8 +147,17 @@ export function HarnessApp() {
           </button>
           <button
             type="button"
+            aria-label={full ? "Exit full view (⌘.)" : "Full view (⌘.)"}
+            title={full ? "Exit full view (⌘.)" : "Full view (⌘.)"}
+            onClick={toggleFull}
+            className={cn("hidden rounded-md p-1.5 hover:bg-white/[0.06] md:block", full ? "text-indigo" : "text-white/50")}
+          >
+            {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+          <button
+            type="button"
             aria-label="Toggle panel"
-            onClick={() => setPanel(panel ? null : { kind: "inspector" })}
+            onClick={() => (setPanel(panel ? null : { kind: "inspector" }), setRestore(null))}
             className={cn("rounded-md p-1.5 hover:bg-white/[0.06]", panel ? "text-foreground" : "text-white/50")}
           >
             <PanelRight size={18} />
@@ -120,7 +172,7 @@ export function HarnessApp() {
           }}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <div className="mx-auto max-w-[820px] px-5 pb-10 pt-8 sm:px-8">
+          <div className={cn("mx-auto px-5 pb-10 pt-8 transition-[max-width] duration-300 sm:px-8", full ? "max-w-[1040px]" : "max-w-[820px]")}>
             {view === "chat" && (
               <>
                 {model.turns.length === 0 && <p className="pt-24 text-center text-[15px] text-white/40">Connecting to the local harness…</p>}
@@ -134,7 +186,7 @@ export function HarnessApp() {
         </div>
 
         {view === "chat" && (
-          <div className="mx-auto w-full max-w-[860px] px-4 pb-4 sm:px-6">
+          <div className={cn("mx-auto w-full px-4 pb-4 sm:px-6", full ? "max-w-[1080px]" : "max-w-[860px]")}>
             <Composer
               model={model}
               value={composer}
@@ -150,7 +202,18 @@ export function HarnessApp() {
       {/* Right panel: inline on wide screens, a sheet on smaller ones */}
       {right && (
         <>
-          <aside className={cn("hidden shrink-0 border-l border-white/[0.06] xl:block", panel?.kind === "review" ? "w-[560px]" : "w-[380px]")}>{right}</aside>
+          <aside style={{ width: panel?.kind === "review" ? reviewWidth : panelWidth }} className="relative hidden shrink-0 border-l border-white/[0.06] xl:block">
+            <Resizer
+              side="left"
+              width={panel?.kind === "review" ? reviewWidth : panelWidth}
+              min={320}
+              max={820}
+              reset={panel?.kind === "review" ? 560 : 420}
+              onWidth={panel?.kind === "review" ? setReviewWidth : setPanelWidth}
+              label="Resize panel"
+            />
+            {right}
+          </aside>
           <div className="fixed inset-0 z-40 flex justify-end bg-black/40 xl:hidden" onClick={() => setPanel(null)}>
             <div className="h-full w-[min(560px,100vw)] border-l border-white/[0.08]" onClick={(e) => e.stopPropagation()}>
               {right}
