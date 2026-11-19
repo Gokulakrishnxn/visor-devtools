@@ -45,13 +45,18 @@ export function ClaudeIcon({ size, className, brand = true }: IconProps) {
   );
 }
 
-export function GeminiIcon({ size, className, brand = true }: IconProps) {
+/** Gemini's four-point spark, in its blue-to-violet gradient. */
+export function GeminiIcon({ size = 16, className, brand = true }: IconProps) {
   return (
-    <BrandIcon
-      mark={siGooglegemini}
-      size={size}
-      className={className}
-      color={brand ? `#${siGooglegemini.hex}` : "currentColor"}
-    />
+    <svg role="img" aria-label="Gemini" viewBox="0 0 24 24" width={size} height={size} className={className}>
+      <defs>
+        <linearGradient id="gemini-spark" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#1C7DFF" />
+          <stop offset="0.52" stopColor="#1C69FF" />
+          <stop offset="1" stopColor="#B987FF" />
+        </linearGradient>
+      </defs>
+      <path d={siGooglegemini.path} fill={brand ? "url(#gemini-spark)" : "currentColor"} />
+    </svg>
   );
 }
