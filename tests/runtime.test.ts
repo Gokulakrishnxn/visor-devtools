@@ -47,6 +47,7 @@ describe("MockRuntimeAdapter + SessionRunner", () => {
       ["pnpm test auth --repeat 50", "ok"],
       ["git push --force origin main", "denied"],
       ["git push origin fix/auth-flake", "ok"],
+      ["pnpm test auth", "ok"], // turn 2
     ]);
   });
 
@@ -54,14 +55,30 @@ describe("MockRuntimeAdapter + SessionRunner", () => {
     const events = await setup().run({ ...base, sessionId: "s3" });
     const usage = of(events, "usage");
     expect(new Set(usage.map((u) => u.messageId)).size).toBeLessThan(usage.length); // the duplicate was emitted
-    const turn = of(events, "turn.ended")[0]!;
+    const turnsEnded = of(events, "turn.ended");
+    expect(turnsEnded).toHaveLength(2);
+    const turnTotal = turnsEnded.reduce((n, t) => n + t.costMicroUsd, 0);
     const spanCost = of(events, "span.ended").reduce((n, e) => n + e.costMicroUsd, 0);
-    expect(turn.costMicroUsd).toBe(spanCost); // the duplicate was not double-counted
+    expect(turnTotal).toBe(spanCost); // the duplicate was not double-counted
+    expect(of(events, "session.ended")[0]!.totalCostMicroUsd).toBe(turnTotal);
+    const turn = turnsEnded[0]!;
     expect(Number.isInteger(turn.costMicroUsd) && Number.isInteger(turn.cacheSavingsMicroUsd)).toBe(true);
     expect(turn.cacheSavingsMicroUsd).toBeGreaterThan(0);
     const ctx = summarizeContext(turn.contextBreakdown, turn.contextLimitTokens);
     expect(ctx.used).toBe(turn.contextUsedTokens);
     expect(Object.values(turn.contextBreakdown).every((v) => v > 0)).toBe(true); // all 7 categories populated
+  });
+
+  it("plays a second turn after compacting old tool output", async () => {
+    const events = await setup().run({ ...base, sessionId: "s7" });
+    const turnsStarted = of(events, "turn.started");
+    expect(turnsStarted.map((t) => t.turnIndex)).toEqual([0, 1]);
+    const compaction = of(events, "span.started").find((s) => s.spanType === "compaction")!;
+    expect(compaction.turnId).toBe(turnsStarted[1]!.turnId);
+    const out = of(events, "span.ended").find((e) => e.spanId === compaction.spanId)!.output as { beforeTokens: number; afterTokens: number };
+    expect(out.afterTokens).toBeLessThan(out.beforeTokens);
+    const [t1, t2] = of(events, "turn.ended");
+    expect(t2!.contextBreakdown.toolResults).toBeLessThan(t1!.contextBreakdown.toolResults + 2_000);
   });
 
   it("nests subagent spans and rolls up their cost", async () => {

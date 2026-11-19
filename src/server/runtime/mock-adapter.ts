@@ -53,8 +53,10 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
     const { sessionId, modelId } = options;
     const sc = this.scenario;
     const price = this.pricing.get(modelId);
-    const ledger = new UsageLedger();
-    const turnId = this.newId();
+    // Reassigned per turn; the nested generators read the current values
+    let ledger = new UsageLedger();
+    let turnId = "";
+    let sessionCost = 0;
     const wait = (ms: number) => sleep(ms * this.speed, hooks.signal);
     let context: ContextBreakdown = { ...emptyBreakdown(), ...sc.contextBase };
 
@@ -68,7 +70,6 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
       budgetCapMicroUsd: options.budgetCapMicroUsd,
       at: this.now(),
     };
-    yield { type: "turn.started", sessionId, turnId, turnIndex: 0, prompt: options.prompt || sc.prompt, at: this.now() };
 
     // Nested generators below need the adapter's clock and ID source
     const self = { now: this.now, newId: this.newId };
@@ -169,30 +170,58 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
       yield { type: "span.ended", sessionId, spanId, status: "ok", costMicroUsd: 0, at: self.now() };
     }
 
-    for (const step of sc.steps) {
+    for (const [turnIndex, turn] of sc.turns.entries()) {
       if (hooks.signal.aborted) break;
-      if (step.kind === "llm") yield* runLlm(step, null, false);
-      else yield* runSubagent(step);
+      ledger = new UsageLedger();
+      turnId = this.newId();
+      const prompt = turnIndex === 0 && options.prompt ? options.prompt : turn.prompt;
+      yield { type: "turn.started", sessionId, turnId, turnIndex, prompt, at: this.now() };
+      context = { ...context, messages: context.messages + Math.ceil(prompt.length / 4) };
+
+      for (const step of turn.steps) {
+        if (hooks.signal.aborted) break;
+        if (step.kind === "llm") yield* runLlm(step, null, false);
+        else if (step.kind === "subagent") yield* runSubagent(step);
+        else {
+          const spanId = this.newId();
+          const before = Object.values(context).reduce((n, v) => n + v, 0);
+          yield { type: "span.started", sessionId, turnId, spanId, parentSpanId: null, spanType: "compaction", name: "Auto-compact", at: this.now() };
+          await wait(step.ms);
+          const dropped = Math.min(step.droppedTokens, context.toolResults);
+          context = { ...context, toolResults: context.toolResults - dropped, messages: context.messages + step.summaryTokens };
+          const after = Object.values(context).reduce((n, v) => n + v, 0);
+          yield {
+            type: "span.ended",
+            sessionId,
+            spanId,
+            status: "ok",
+            output: { beforeTokens: before, afterTokens: after, droppedToolResultTokens: dropped, summaryTokens: step.summaryTokens },
+            costMicroUsd: 0,
+            at: this.now(),
+          };
+        }
+      }
+
+      const cost = ledger.cost((id) => this.pricing.get(id));
+      sessionCost += cost.total;
+      yield {
+        type: "turn.ended",
+        sessionId,
+        turnId,
+        costMicroUsd: cost.total,
+        cacheSavingsMicroUsd: cost.cacheSavings,
+        contextUsedTokens: Object.values(context).reduce((n, v) => n + v, 0),
+        contextLimitTokens: price.contextWindow,
+        contextBreakdown: context,
+        at: this.now(),
+      };
     }
 
-    const cost = ledger.cost((id) => this.pricing.get(id));
-    const used = Object.values(context).reduce((n, v) => n + v, 0);
-    yield {
-      type: "turn.ended",
-      sessionId,
-      turnId,
-      costMicroUsd: cost.total,
-      cacheSavingsMicroUsd: cost.cacheSavings,
-      contextUsedTokens: used,
-      contextLimitTokens: price.contextWindow,
-      contextBreakdown: context,
-      at: this.now(),
-    };
     yield {
       type: "session.ended",
       sessionId,
       status: hooks.signal.aborted ? "aborted_budget" : "completed",
-      totalCostMicroUsd: cost.total,
+      totalCostMicroUsd: sessionCost,
       at: this.now(),
     };
   }
