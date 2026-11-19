@@ -1,0 +1,47 @@
+export const metadata = { title: "Overrides" };
+
+Overrides turn V.I.S.O.R. from a log viewer into a control surface. When a tool call matches a rule, the agent **pauses mid-flight** and an amber breakpoint card appears exactly where execution stopped.
+
+## The three choices
+
+<CardGroup cols={3}>
+  <Card title="Approve (A)" href="#approve">Release the call as-is and log the decision.</Card>
+  <Card title="Edit JSON (E)" href="#edit-json">Change the tool arguments before they run.</Card>
+  <Card title="Deny (D)" href="#deny">Block it and send steering back to Claude.</Card>
+</CardGroup>
+
+### Approve
+Releases the frozen promise immediately and writes an `approved` row to `policy_audit_log`.
+
+### Edit JSON
+Opens an inline CodeMirror editor with live Zod validation. The edited arguments go back to Claude, and both the original and final payloads are recorded.
+
+### Deny
+Blocks the call. Optional operator text is attached as feedback so Claude recovers cleanly, for example *“Never force-push main. Push to a branch instead.”*
+
+## How it works
+
+V.I.S.O.R. hooks into the Agent SDK's `PreToolUse` and `canUseTool` callbacks. Hooks run **before** allow/deny rules, so built-in protections can't be skipped accidentally.
+
+```ts
+const result = await breakpoints.wait({
+  sessionId,
+  spanId,
+  tool: "Bash",
+  input: { command: "git push --force origin main" },
+  rule: "destructive-git",
+});
+// result.decision: "approved" | "edited" | "denied"
+```
+
+## Built-in rules
+
+- Block reads of `.env` files and private keys
+- Flag destructive shell commands (`rm -rf`, `git push --force`, `DROP TABLE`)
+- Regex path alerts for sensitive folders
+- High-token spike warnings
+- Hard USD budget cap (session and turn)
+
+<Warning>An auto-blocked call (like reading `.env`) never reaches a breakpoint card. It is denied and logged as `auto_blocked`.</Warning>
+
+Configure your own rules in [`.visor.json`](/docs/configuration).

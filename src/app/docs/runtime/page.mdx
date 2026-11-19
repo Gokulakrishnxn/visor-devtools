@@ -1,0 +1,42 @@
+export const metadata = { title: "Runtime" };
+
+V.I.S.O.R. isn't a post-run viewer: it **is** the harness. A local daemon drives the agent loop, executes tools, enforces guardrails and streams typed events to the GUI.
+
+## The daemon
+
+- Hono HTTP + WebSocket server on `127.0.0.1:4310`
+- Per-launch session token on every request
+- Streams `VisorEvent` messages; every span is also persisted to SQLite
+- Instant offline replay of any past session
+
+## Adapters
+
+```ts
+export interface AgentRuntimeAdapter {
+  start(session: SessionConfig): AsyncIterable<VisorEvent>;
+  resolveBreakpoint(spanId: string, decision: OverrideDecision): void;
+  abort(reason: "user" | "budget"): Promise<void>;
+}
+```
+
+<Tabs>
+  <Tab title="ClaudeSdkAdapter">
+    Wraps `@anthropic-ai/claude-agent-sdk` with isolated `settingSources`, a configurable model and effort level, and MCP server connections.
+  </Tab>
+  <Tab title="MockRuntimeAdapter">
+    Deterministic, zero-cost replays with realistic thinking, diffs, subagents and breakpoints. Used for every UI preview and automated test, so development never spends API credits.
+  </Tab>
+</Tabs>
+
+## Event stream
+
+```json
+{
+  "type": "span.started",
+  "spanId": "01JD3K9Q6V2N8W",
+  "parentSpanId": "01JD3K9Q4M1F7T",
+  "spanType": "bash",
+  "name": "pnpm test auth",
+  "startedAt": 1795121160594
+}
+```

@@ -1,0 +1,37 @@
+export const metadata = { title: "Spans" };
+
+Every prompt becomes an OpenTelemetry-style tree of timed spans:
+
+```text
+session
+└─ turn
+   ├─ llm_call
+   │  └─ thinking
+   ├─ tool_call  (read · edit · bash · mcp)
+   └─ subagent
+      └─ … its own llm and tool spans
+```
+
+## Span fields
+
+<Field name="span_type" type="enum" required>
+  One of `llm`, `thinking`, `read`, `edit`, `bash`, `mcp`, `subagent`, `compaction`, `override`.
+</Field>
+<Field name="parent_span_id" type="ULID | null">
+  The parent span. `null` for the root of a turn.
+</Field>
+<Field name="status" type="enum" required>
+  `running`, `paused`, `ok`, `error`, `denied` or `edited`.
+</Field>
+<Field name="latency_ms" type="integer">
+  Wall-clock duration in milliseconds.
+</Field>
+<Field name="cost_micro_usd" type="integer">
+  Cost attributed to this node, in micro-dollars.
+</Field>
+
+## Waterfall view
+
+The waterfall plots each span on a millisecond timeline, with parallel subagents in their own swim lanes. Clicking a bar jumps straight to its diff, thinking block or payload. Error spans get a rose badge; paused spans glow amber.
+
+<Tip>Sort a session's spans by `cost_micro_usd` to find the one subagent that ate your budget.</Tip>

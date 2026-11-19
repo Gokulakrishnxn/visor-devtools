@@ -1,0 +1,35 @@
+export const metadata = { title: "Inspection" };
+
+Inspection is everything you can *see*: the model's reasoning, the files it touched, the payloads it sent, and how full its context window is.
+
+## What gets rendered
+
+- **Thinking** — streaming, collapsible accordions with token count and duration (violet accent).
+- **Read** — syntax-highlighted file viewers with “Open in Cursor / VS Code / Zed / Finder”.
+- **Edit** — unified or split diffs with one-click copy.
+- **MCP** — the raw JSON-RPC request and response, formatted and copyable.
+- **Subagents** — recursive cards with their own spans, tokens, latency and cost.
+
+Every message, path and payload is real selectable text. No ANSI noise.
+
+## Seven-category context
+
+Each turn stores a breakdown of what fills the context window, shown as a stacked bar and an inspector table:
+
+1. **Project rules** — `CLAUDE.md` at global, project and directory level
+2. **MCP & tool schemas** — connected tool definitions and skills
+3. **Mentioned files** — explicit `@` references
+4. **Tool results** — reads, grep output, bash stdout, MCP responses
+5. **Extended thinking** — retained reasoning blocks
+6. **Subagent overhead** — handoff prompts and returned payloads
+7. **Messages** — user and assistant turns
+
+Compaction boundaries (`PreCompact` / `PostCompact`) are marked on a per-turn timeline, so you can see exactly what was dropped.
+
+## Keyboard first
+
+| Keys | Action |
+| --- | --- |
+| `⌘K` | Command palette: sessions, paths, thinking, outputs, errors |
+| `J` / `K` | Next / previous span |
+| `A` / `E` / `D` | Approve, edit JSON, deny a breakpoint |

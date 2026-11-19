@@ -1,0 +1,55 @@
+export const metadata = { title: "Verified" };
+
+“Verified” means every number on screen comes from real usage data, counted exactly. No rough token estimates, no floating-point rounding drift.
+
+## Micro-dollars
+
+All money is stored as **integers in micro-dollars (µUSD)**:
+
+- `1 USD = 1,000,000 µUSD`
+- `1 cent = 10,000 µUSD`
+
+Values are only formatted to `$0.0000` at the very edge, in the UI.
+
+```ts
+// Cost of one bucket, in integer µUSD (price is µUSD per 1M tokens)
+export function bucketCost(tokens: number, pricePerMTok: number): number {
+  return Math.round((tokens * pricePerMTok) / 1_000_000);
+}
+
+export const formatUsd = (micro: number) => `$${(micro / 1_000_000).toFixed(4)}`;
+```
+
+## Token buckets
+
+Every assistant message is split into five buckets, each priced separately:
+
+| Bucket | Source field |
+| --- | --- |
+| Fresh input | `input_tokens` |
+| Cache write (5 min) | `cache_creation_input_tokens` (5m) |
+| Cache write (1 hour) | `cache_creation_input_tokens` (1h) |
+| Cache read | `cache_read_input_tokens` |
+| Output + thinking | `output_tokens` |
+
+**Cache savings** are shown as what the cache-read tokens *would* have cost as fresh input, minus what they did cost.
+
+## Pricing registry
+
+Prices live in `src/server/telemetry/pricing.ts` and can be overridden at runtime with `~/.visor/pricing.json`.
+
+| Model | Input | 5m write | 1h write | Cache read | Output | Context |
+| --- | --- | --- | --- | --- | --- | --- |
+| `claude-opus-5-5` | $4.00 | $5.00 | $8.00 | $0.20 | $20.00 | 1M |
+| `claude-sonnet-5-5` | $2.00 | $2.50 | $4.00 | $0.10 | $10.00 | 1M |
+| `claude-haiku-4-5` | $1.00 | $1.25 | $2.00 | $0.10 | $5.00 | 200k |
+
+<Note>Prices are per 1M tokens and taken from the PRD. Always confirm against Anthropic's current pricing before relying on them for billing.</Note>
+
+## Deduplication & reconciliation
+
+Parallel tool calls can repeat the same usage block. V.I.S.O.R. counts usage **once per `message_id`**, streams live deltas for instant ticking numbers, and reconciles each turn against the SDK's final `total_cost_usd` and `model_usage`.
+
+## Credit wallet & budget caps
+
+A local prepaid wallet tracks spend in the `credit_ledger` table (deposits, debits, adjustments). Hard caps are enforced twice: by the SDK's `maxBudgetUsd` and by V.I.S.O.R.'s own `PreToolUse` watchdog, which aborts the loop as soon as session or turn cost reaches the cap.
