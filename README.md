@@ -41,6 +41,23 @@ Then open the URL the daemon prints (`http://127.0.0.1:5173/?token=…`). A mock
 
 Set `VISOR_DB=/some/path/traces.db` to keep traces somewhere other than `~/.visor/`.
 
+### Live runs (real Claude, real money)
+
+By default everything runs on the free mock runtime. To drive the real **Claude Agent SDK**, opt in explicitly:
+
+```bash
+VISOR_RUNTIME=claude pnpm dev      # dev
+node dist/cli.js --live --cap 5    # built CLI, hard $5.00 cap
+```
+
+You need Claude credentials (`ANTHROPIC_API_KEY`, or a profile from `ant auth login`). In live mode:
+
+- Every tool call goes through V.I.S.O.R.'s `PreToolUse` hook first: secrets are blocked, risky commands pause for Approve / Edit JSON / Deny, and a denial's steering note is sent back to Claude.
+- `--cap` is enforced twice: the SDK's `maxBudgetUsd` and V.I.S.O.R.'s own watchdog.
+- The session's cost is reconciled against the SDK's `total_cost_usd`.
+- `.visor.json` in the workspace adds your own rules, default model / effort / budget, and MCP servers.
+- Nothing starts on its own; a run begins when you send a prompt.
+
 ## Project layout
 
 ```text
