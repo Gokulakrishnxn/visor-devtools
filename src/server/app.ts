@@ -120,6 +120,12 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ sessionId: id, capMicroUsd: cap, limitedByCredit }, 202);
   });
 
+  api.patch("/sessions/:id", async (c) => {
+    const body = z.object({ title: z.string().trim().min(1).max(200) }).safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "Give the session a name" }, 400);
+    return store?.renameSession(c.req.param("id"), body.data.title) ? c.json({ title: body.data.title }) : c.json({ error: "Session not found" }, 404);
+  });
+
   // Delete a session's history (never touches files on disk)
   api.delete("/sessions/:id", (c) => {
     const id = c.req.param("id");
@@ -148,7 +154,9 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const id = c.req.param("id");
     const live = runner.events(id);
     const events: VisorEvent[] = live.length ? live : (store?.events(id) ?? []);
-    return c.json({ events });
+    // Show the name it has now, if it was renamed
+    const title = store?.titleOf(id);
+    return c.json({ events: title ? events.map((e) => (e.type === "session.started" ? { ...e, title } : e)) : events });
   });
 
   api.post("/sessions/:id/stop", (c) => {

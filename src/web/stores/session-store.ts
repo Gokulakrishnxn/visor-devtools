@@ -38,6 +38,10 @@ type SessionState = {
   /** Delete sessions from V.I.S.O.R. (one, or a whole workspace by path). Returns an error message or null. */
   deleteSession: (sessionId: string) => Promise<string | null>;
   deleteWorkspace: (workspacePath: string) => Promise<string | null>;
+  renameSession: (sessionId: string, title: string) => Promise<string | null>;
+  /** Workspace folders removed from the sidebar, with when (they come back when a newer session starts there). */
+  hiddenWorkspaces: Record<string, number>;
+  hideWorkspace: (workspacePath: string) => void;
   /** Open a stored session: its events load from SQLite and replay instantly. */
   open: (sessionId: string) => Promise<void>;
   start: (opts?: { prompt?: string; capUsd?: string; modelId?: string; effort?: "low" | "medium" | "high" }) => Promise<void>;
@@ -68,6 +72,25 @@ async function api<T>(token: string, path: string, init?: RequestInit): Promise<
   return (await res.json()) as T;
 }
 
+const HIDDEN_KEY = "visor.hiddenWorkspaces";
+function readHidden(): Record<string, number> {
+  try {
+    const v = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "{}") as unknown;
+    return v && typeof v === "object" ? (v as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function errorText(err: unknown): string {
+  const text = (err as Error).message.replace(/^\d+ /, "");
+  try {
+    return (JSON.parse(text) as { error?: string }).error ?? text;
+  } catch {
+    return text;
+  }
+}
+
 type Get = () => SessionState;
 type Set = (partial: Partial<SessionState>) => void;
 
@@ -75,12 +98,7 @@ async function removeSessions(get: Get, set: Set, path: string, match: (s: Store
   try {
     await api(get().token, path, { method: "DELETE" });
   } catch (err) {
-    const text = (err as Error).message.replace(/^\d+ /, "");
-    try {
-      return (JSON.parse(text) as { error?: string }).error ?? text;
-    } catch {
-      return text;
-    }
+    return errorText(err);
   }
   const gone = new Set(get().sessions.filter(match).map((s) => s.id));
   const bySession = Object.fromEntries(Object.entries(get().bySession).filter(([id]) => !gone.has(id)));
@@ -186,6 +204,31 @@ export const useSession = create<SessionState>((set, get) => ({
       set({ sessions });
     } catch {
       // the list is a convenience; the live stream keeps working without it
+    }
+  },
+
+  async renameSession(sessionId, title) {
+    try {
+      await api(get().token, `/api/sessions/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+    } catch (err) {
+      return errorText(err);
+    }
+    const bySession = get().bySession[sessionId];
+    set({
+      sessions: get().sessions.map((s) => (s.id === sessionId ? { ...s, title } : s)),
+      ...(bySession ? { bySession: { ...get().bySession, [sessionId]: bySession.map((e) => (e.type === "session.started" ? { ...e, title } : e)) } } : {}),
+    });
+    return null;
+  },
+
+  hiddenWorkspaces: readHidden(),
+  hideWorkspace(workspacePath) {
+    const hiddenWorkspaces = { ...get().hiddenWorkspaces, [workspacePath]: Date.now() };
+    set({ hiddenWorkspaces });
+    try {
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenWorkspaces));
+    } catch {
+      // private window: it stays hidden until reload
     }
   },
 

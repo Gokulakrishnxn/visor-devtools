@@ -242,6 +242,18 @@ describe("persistence and config for Phase 3", () => {
     const auth = { authorization: "Bearer t" };
     const ids = () => store.listSessions().map((s) => s.id).sort();
 
+    const rename = (id: string, title: string) =>
+      app.request(`/api/sessions/${id}`, { method: "PATCH", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ title }) });
+    expect((await rename("a2", "  Elon wiki  ")).status).toBe(200);
+    expect(store.listSessions().find((s) => s.id === "a2")?.title).toBe("Elon wiki");
+    const reopened = (await (await app.request("/api/sessions/b1/events", { headers: auth })).json()) as { events: VisorEvent[] };
+    expect(reopened.events[0]).toMatchObject({ type: "session.started", title: "x" });
+    runner.forget("a2"); // after a restart the log comes from SQLite, with the new name
+    const renamed = (await (await app.request("/api/sessions/a2/events", { headers: auth })).json()) as { events: VisorEvent[] };
+    expect(renamed.events[0]).toMatchObject({ type: "session.started", title: "Elon wiki" });
+    expect((await rename("a2", "   ")).status).toBe(400);
+    expect((await rename("nope", "x")).status).toBe(404);
+
     expect((await app.request("/api/sessions/a1", { method: "DELETE", headers: auth })).status).toBe(200);
     expect(ids()).toEqual(["a2", "b1"]);
     expect(store.events("a1")).toEqual([]); // its recorded events went with it
