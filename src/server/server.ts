@@ -32,6 +32,8 @@ export type StartOptions = {
   mockSpeed?: number;
   /** "claude" runs the real Agent SDK (spends money); default "mock". */
   runtime?: RuntimeKind;
+  /** `--cap`: the most any one message may spend, in µUSD (overrides .visor.json's sessionCapUsd). */
+  capMicroUsd?: number | null;
 };
 
 export type RunningDaemon = { server: ServerType; url: string; token: string; runner: SessionRunner; runtime: RuntimeKind; close: () => Promise<void> };
@@ -86,7 +88,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     defaultEffort: config.effort,
     store: new TraceStore(db),
     wallet,
-    defaultCapMicroUsd: config.budget.sessionCapUsd ?? null,
+    maxCapMicroUsd: opts.capMicroUsd ?? config.budget.sessionCapUsd ?? null,
     info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
