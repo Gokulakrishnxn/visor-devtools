@@ -58,6 +58,7 @@ export function Sidebar({
   const [confirm, setConfirm] = useState<{ title: string; body: string; action: string; run: () => void } | null>(null);
   const info = useSession((s) => s.info);
   const wallet = useSession((s) => s.wallet);
+  const profile = useSession((s) => s.profile);
   const live = info?.runtime === "claude";
   const spending = live && (model.session?.status === "running" || model.session?.status === "paused") ? model.cost.total : 0;
   const here = info?.workspacePath ?? "workspace";
@@ -117,7 +118,8 @@ export function Sidebar({
           </div>
         )}
         {[...groups.entries()].map(([path, list]) => {
-          const name = folderOf(path);
+          // One folder: a plain "Recents" list like the Claude app; several: one heading per folder
+          const name = groups.size === 1 ? "Recents" : folderOf(path);
           return (
             <WorkspaceGroup
               key={path}
@@ -186,12 +188,23 @@ export function Sidebar({
         className="group mx-2 mb-2 flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.05]"
         aria-label="Open credit wallet"
       >
-        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", live ? "bg-indigo/20 text-indigo" : "bg-white/[0.09] text-white/60")}>
-          <Wallet size={14} />
-        </span>
+        {profile?.name ? (
+          <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#c96442] text-[12.5px] font-semibold text-white">
+            {profile.name[0]!.toUpperCase()}
+          </span>
+        ) : (
+          <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", live ? "bg-indigo/20 text-indigo" : "bg-white/[0.09] text-white/60")}>
+            <Wallet size={14} />
+          </span>
+        )}
         <span className="min-w-0 flex-1 leading-tight">
           <span className="block truncate text-[13px] text-foreground">
-            {wallet?.active ? (
+            {profile?.name ? (
+              <>
+                {profile.name}
+                {profile.plan && <span className="text-white/45"> · {profile.plan}</span>}
+              </>
+            ) : wallet?.active ? (
               <>
                 <Usd micro={Math.max(0, wallet.balanceMicroUsd - spending)} decimals={2} /> credit
               </>
@@ -199,7 +212,14 @@ export function Sidebar({
               "Set up credit"
             )}
           </span>
-          <span className="block truncate text-[11.5px] text-white/45">{live ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}</span>
+          <span className="block truncate text-[11.5px] text-white/45">
+            {profile?.name && wallet?.active && (
+              <>
+                <Usd micro={Math.max(0, wallet.balanceMicroUsd - spending)} decimals={2} /> credit ·{" "}
+              </>
+            )}
+            {live ? "Live" : "Mock · $0 spend"}
+          </span>
         </span>
         <ChevronRight size={14} className="shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60" />
       </button>
