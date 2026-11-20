@@ -12,6 +12,7 @@ import type { Wallet } from "./wallet";
 import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
 import { writeCommitMessage } from "./commit-message";
 import { ctxGet } from "./straitjacket";
+import { Limits, type LimitStore } from "./limits";
 import { commit, diffForMessage, gitState, simpleMessage, switchBranch } from "./git";
 import { claudeProfile, type ClaudeProfile } from "./profile";
 import { followUpFrom, type SessionRunner } from "./runtime/session-runner";
@@ -36,6 +37,8 @@ export type AppDeps = {
   profile?: () => Promise<ClaudeProfile>;
   /** Writes a commit message from a diff (tests pass a fake; live uses Claude). */
   commitWriter?: (diff: string, cwd: string) => Promise<{ message: string; costMicroUsd: number }>;
+  /** Your token and daily spending limits. */
+  limits?: LimitStore;
   /** Where no-folder chats get their scratch folders (~/.visor/chats). */
   chatsRoot?: string;
 };
@@ -85,7 +88,8 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile, chatsRoot, commitWriter = writeCommitMessage }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile, chatsRoot, commitWriter = writeCommitMessage, limits }: AppDeps) {
+  const minCap = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b));
   const limitCap = (requested: number | null) => (maxCapMicroUsd === null ? requested : requested === null ? maxCapMicroUsd : Math.min(requested, maxCapMicroUsd));
   const app = new Hono();
 
@@ -115,11 +119,14 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
       return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
     }
     // Once you've set credit, a live run can never spend more than what's left
-    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(requested) : { cap: requested, limitedByCredit: false };
+    // Your daily limits: refuse when used up; otherwise the run's caps shrink to what's left today
+    const allowance = limits?.allowance() ?? { ok: true as const, tokens: null, maxMicroUsd: null };
+    if (!allowance.ok) return c.json({ error: allowance.error }, 429);
+    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(minCap(requested, allowance.maxMicroUsd)) : { cap: minCap(requested, allowance.maxMicroUsd), limitedByCredit: false };
     if (cap === 0 && limitedByCredit) return c.json({ error: "No credit left. Add credit in the wallet to start a live run." }, 402);
     // Fire and forget: progress streams over the WebSocket
     runner
-      .run({ sessionId, prompt, workspacePath: folder, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
+      .run({ sessionId, prompt, workspacePath: folder, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap, tokenCap: allowance.tokens })
       .catch((err: unknown) => console.error(`[visor] session ${sessionId} failed:`, err));
     return c.json({ sessionId, capMicroUsd: cap, limitedByCredit }, 202);
   });
@@ -141,7 +148,10 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     } catch {
       return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
     }
-    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(requested) : { cap: requested, limitedByCredit: false };
+    // Your daily limits: refuse when used up; otherwise the run's caps shrink to what's left today
+    const allowance = limits?.allowance() ?? { ok: true as const, tokens: null, maxMicroUsd: null };
+    if (!allowance.ok) return c.json({ error: allowance.error }, 429);
+    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(minCap(requested, allowance.maxMicroUsd)) : { cap: minCap(requested, allowance.maxMicroUsd), limitedByCredit: false };
     if (cap === 0 && limitedByCredit) return c.json({ error: "No credit left. Add credit in the wallet to start a live run." }, 402);
     runner
       .run({
@@ -152,6 +162,7 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
         modelId: body.data.modelId ?? from.modelId,
         effort: body.data.effort ?? from.effort,
         budgetCapMicroUsd: cap,
+        tokenCap: allowance.tokens,
         followUp: from.followUp,
         priorEvents: prior,
       })
@@ -209,6 +220,15 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ path, parent: parent === path ? null : parent, home: homedir(), folders });
   });
 
+  // Your limits and today's usage (tokens: input + cache writes + output)
+  api.get("/limits", (c) => c.json({ limits: limits?.get() ?? null, today: limits?.today() ?? null }));
+  api.put("/limits", async (c) => {
+    if (!limits) return c.json({ error: "Limits aren't available here." }, 400);
+    const body = Limits.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "Limits must be whole numbers above zero, or empty for no limit." }, 400);
+    return c.json({ limits: limits.set(body.data), today: limits.today() });
+  });
+
   // Straitjacket: page through the full output it stored (the digest Claude saw is in the step)
   api.get("/ctx/output", async (c) => {
     const cwd = existingFolder(c.req.query("path") || workspacePath);
@@ -257,6 +277,8 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     // Mock runtime: a plain summary, no AI and no cost
     if (info.runtime !== "claude") return c.json({ message: simpleMessage(files), costMicroUsd: 0, ai: false });
     if (wallet && wallet.effectiveCap(null).cap === 0) return c.json({ error: "No credit left. Add credit in the wallet first." }, 402);
+    const allowed = limits?.allowance();
+    if (allowed && !allowed.ok) return c.json({ error: allowed.error }, 429);
     try {
       const { message, costMicroUsd } = await commitWriter(await diffForMessage(cwd, body.data.paths), cwd);
       wallet?.chargeExtra(costMicroUsd, "Commit message (AI)");

@@ -9,6 +9,8 @@ export type RunOptions = {
   modelId: string;
   effort: Effort;
   budgetCapMicroUsd: MicroUsd | null;
+  /** Your token limit for this run (input + cache writes + output); null or unset = none. */
+  tokenCap?: number | null;
   /** Set when this prompt continues an existing session instead of starting one. */
   followUp?: FollowUp;
 };

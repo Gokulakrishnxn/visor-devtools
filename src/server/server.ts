@@ -6,6 +6,7 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import type { VisorEvent } from "@shared/events";
 import { createApp, requireToken } from "./app";
 import { DEFAULT_DB_PATH, openDatabase } from "./db/client";
+import { LimitStore } from "./limits";
 import { TraceRecorder } from "./db/recorder";
 import { MockRuntimeAdapter } from "./runtime/mock-adapter";
 import { ClaudeSdkAdapter } from "./runtime/claude-sdk-adapter";
@@ -96,6 +97,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     wallet,
     maxCapMicroUsd: opts.capMicroUsd ?? config.budget.sessionCapUsd ?? null,
     chatsRoot: join(dirname(opts.dbPath ?? DEFAULT_DB_PATH), "chats"),
+    limits: new LimitStore(db, opts.dbPath === ":memory:" ? null : join(dirname(opts.dbPath ?? DEFAULT_DB_PATH), "limits.json")),
     info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, straitjacket: config.straitjacket.enabled === false ? null : config.straitjacket, rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
