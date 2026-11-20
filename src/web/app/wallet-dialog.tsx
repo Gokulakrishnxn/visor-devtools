@@ -5,6 +5,7 @@ import { formatUsd } from "@shared/money";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 import { useSession, type LedgerEntry } from "@/stores/session-store";
+import { LimitsPanel } from "./limits-panel";
 
 const TYPE_TONE: Record<LedgerEntry["entryType"], string> = {
   deposit: "text-emerald",
@@ -95,7 +96,7 @@ export function WalletDialog({ open, onClose, model }: { open: boolean; onClose:
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-label="Credit wallet"
-            className="flex max-h-[80vh] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-popover shadow-2xl"
+            className="flex max-h-[88vh] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-popover shadow-2xl"
           >
             <div className="flex items-center gap-2 border-b border-white/[0.07] px-5 py-3.5">
               <WalletIcon size={16} className="text-white/55" />
@@ -146,6 +147,8 @@ export function WalletDialog({ open, onClose, model }: { open: boolean; onClose:
               </div>
               {error && <p className="mt-2 text-[12.5px] text-rose">{error}</p>}
             </div>
+
+            <LimitsPanel />
 
             <div className="mt-5 flex items-center border-t border-white/[0.07] px-5 pt-3">
               <span className="text-[12px] text-white/45">History</span>

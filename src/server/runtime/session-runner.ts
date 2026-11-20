@@ -5,6 +5,7 @@ import { BudgetWatchdog } from "../interceptor/budget";
 import { PolicyEngine } from "../interceptor/policy";
 import { editOutsideWorkspace } from "../interceptor/workspace-guard";
 import { TriggerEngine, type TriggerAlert } from "../interceptor/triggers";
+import { freshTokens } from "../limits";
 import { UsageLedger } from "../telemetry/cost";
 import { PricingRegistry } from "../telemetry/pricing";
 import type { AgentRuntimeAdapter, FollowUp, RunOptions, ToolUseRequest, ToolUseVerdict } from "./adapter";
@@ -132,10 +133,18 @@ export class SessionRunner {
     const alert = (a: TriggerAlert, spanId?: string) =>
       this.emit({ type: "alert", sessionId, level: a.level, title: a.title, detail: a.detail, source: a.trigger, spanId, at: this.now() });
 
-    const abortForBudget = () => {
+    const abortForBudget = (reason = "Budget cap reached") => {
       if (controller.signal.aborted) return;
       controller.abort("budget");
-      this.breakpoints.abortSession(sessionId, "Budget cap reached");
+      this.breakpoints.abortSession(sessionId, reason);
+    };
+    // Your token limit (per message, or what's left of today's)
+    const tokenCap = options.tokenCap ?? null;
+    const overTokens = () => tokenCap !== null && freshTokens(spend.totalUsage()) >= tokenCap;
+    const stopForTokens = () => {
+      if (controller.signal.aborted) return;
+      alert({ level: "danger", title: "Token limit reached", detail: `Stopped at ${freshTokens(spend.totalUsage()).toLocaleString("en-US")} of ${tokenCap!.toLocaleString("en-US")} tokens`, trigger: "token-limit" });
+      abortForBudget("Token limit reached");
     };
 
     const onToolUse = async (req: ToolUseRequest): Promise<ToolUseVerdict> => {
@@ -143,6 +152,10 @@ export class SessionRunner {
       if (watchdog.check(spent(), turnSpent()).status === "exceeded") {
         abortForBudget();
         return { decision: "denied", note: "Budget cap reached" };
+      }
+      if (overTokens()) {
+        stopForTokens();
+        return { decision: "denied", note: "Token limit reached" };
       }
       // 2. Notification triggers: alerts, and path blocks
       const fired = this.triggers.onToolCall(req.toolName, req.input);
@@ -205,6 +218,7 @@ export class SessionRunner {
           fresh = spend.add(event.messageId, event.modelId, event.usage);
           turnSpend.add(event.messageId, event.modelId, event.usage);
           if (watchdog.check(spent(), turnSpent()).status === "exceeded") abortForBudget();
+          if (overTokens()) stopForTokens();
         }
         this.emit(event.type === "session.ended" && prior ? { ...event, totalCostMicroUsd: event.totalCostMicroUsd + prior } : event);
         if (event.type === "usage" && fresh) this.triggers.onUsage(event.usage).forEach((a) => alert(a, event.spanId));
