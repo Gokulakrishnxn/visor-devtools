@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, FileText, Globe, Link2, Plug, Search } from "lucide-react";
+import { SiteIcon } from "@/components/visor/site-icon";
 import { collectSources, type Source, type SourceKind } from "@/lib/sources";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,7 @@ function SourceRow({ source: s, onSelect }: { source: Source; onSelect: (spanId:
   const url = s.href ? shortUrl(s.href) : null;
   return (
     <li className="group flex items-start gap-1 rounded-lg hover:bg-white/[0.04]">
+      {s.href && <SiteIcon href={s.href} size={16} className="ml-2 mt-2" />}
       <button type="button" onClick={() => onSelect(s.spanId)} title="Show the step that used it" className="min-w-0 flex-1 px-2 py-1.5 text-left">
         {url ? (
           <span className="block truncate text-[12.5px]">

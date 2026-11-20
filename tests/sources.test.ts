@@ -55,3 +55,17 @@ describe("Sources tab", () => {
     expect(sources.every((s) => !s.href || s.href.startsWith("http"))).toBe(true);
   });
 });
+
+describe("source icons under answers", async () => {
+  const { linksIn, hostOf } = await import("@/components/visor/site-icon");
+  it("reads Markdown links with their titles, then bare links, without duplicates", () => {
+    const md = "Sources:\n- [Fortune – Musk 'not MAGA'](https://fortune.com/2026/11/19/x)\n- [Wiki](https://en.wikipedia.org/wiki/Elon_Musk)\nAlso https://www.npr.org/a. And again https://fortune.com/2026/11/19/x";
+    expect(linksIn(md)).toEqual([
+      { href: "https://fortune.com/2026/11/19/x", title: "Fortune – Musk 'not MAGA'", host: "fortune.com" },
+      { href: "https://en.wikipedia.org/wiki/Elon_Musk", title: "Wiki", host: "en.wikipedia.org" },
+      { href: "https://www.npr.org/a", title: "npr.org", host: "npr.org" },
+    ]);
+    expect(linksIn("[bad](javascript:alert(1))")).toEqual([]);
+    expect(hostOf("ftp://x.org")).toBeNull();
+  });
+});
