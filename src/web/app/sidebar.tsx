@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, EyeOff, FolderPlus, ListFilter, MoreHorizontal, PanelLeftClose, Pencil, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, PanelLeftClose, Pencil, Plug, Plus, ReceiptText, Search, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ export function Sidebar({
   const renameSession = useSession((s) => s.renameSession);
   const hidden = useSession((s) => s.hiddenWorkspaces);
   const hideWorkspace = useSession((s) => s.hideWorkspace);
+  const showHidden = useSession((s) => s.showHiddenWorkspaces);
   const [actionError, setActionError] = useState<string | null>(null);
   const act = async (run: () => Promise<string | null>) => setActionError(await run());
   const [confirm, setConfirm] = useState<{ title: string; body: string; action: string; run: () => void } | null>(null);
@@ -67,8 +68,12 @@ export function Sidebar({
   const groups = new Map<string, StoredSession[]>([[here, []]]);
   for (const s of stored) groups.set(s.workspacePath, [...(groups.get(s.workspacePath) ?? []), s]);
   // Removed folders stay hidden until a session starts there after the removal
+  let hiddenCount = 0;
   for (const [path, at] of Object.entries(hidden)) {
-    if (!(groups.get(path) ?? []).some((s) => s.startedAt > at)) groups.delete(path);
+    if (groups.has(path) && !(groups.get(path) ?? []).some((s) => s.startedAt > at)) {
+      groups.delete(path);
+      hiddenCount++;
+    }
   }
 
   const nav = [
@@ -79,66 +84,38 @@ export function Sidebar({
 
   return (
     <aside style={{ width }} className={cn("flex h-full shrink-0 flex-col bg-[var(--sidebar)] text-[13.5px]", className)}>
-      <div className="desktop-drag desktop-lights-pad px-4 pb-3 pt-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[17px] font-semibold tracking-[0.2em] text-foreground">
-            V<span className="text-indigo">.</span>I<span className="text-indigo">.</span>S<span className="text-indigo">.</span>O<span className="text-indigo">.</span>R
-            <span className="text-indigo">.</span>
-          </span>
-          <span className="rounded border border-white/25 px-1 font-mono text-[9.5px] uppercase leading-4 tracking-wider text-white/70">Harness</span>
-          {onCollapse && (
-            <button type="button" onClick={onCollapse} aria-label="Collapse sidebar (⌘B)" title="Collapse sidebar (⌘B)" className="ml-auto rounded-md p-1 text-white/45 hover:bg-white/[0.08] hover:text-foreground">
-              <PanelLeftClose size={16} />
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onNew}
-          className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-white/[0.09] text-[13.5px] text-foreground transition-colors hover:bg-white/[0.13]"
-        >
-          <PlusCircle size={16} /> New session
-        </button>
+      <div className="desktop-drag desktop-lights-pad flex items-center gap-2 px-4 pb-2 pt-3.5">
+        <span className="text-[14px] font-semibold tracking-[0.18em] text-foreground">
+          V<span className="text-indigo">.</span>I<span className="text-indigo">.</span>S<span className="text-indigo">.</span>O<span className="text-indigo">.</span>R
+          <span className="text-indigo">.</span>
+        </span>
+        {onCollapse && (
+          <button type="button" onClick={onCollapse} aria-label="Collapse sidebar (⌘B)" title="Collapse sidebar (⌘B)" className="ml-auto rounded-md p-1.5 text-white/45 hover:bg-white/[0.08] hover:text-foreground">
+            <PanelLeftClose size={16} />
+          </button>
+        )}
       </div>
 
-      <nav className="space-y-0.5 px-2">
+      <nav className="space-y-px px-2 pt-1" aria-label="Main">
+        <NavRow icon={Plus} label="New session" onClick={onNew} />
+        <NavRow icon={Search} label="Search" hint="⌘K" onClick={onSearch} />
         {nav.map((n) => (
-          <button
-            key={n.id}
-            type="button"
-            onClick={() => onView(view === n.id ? "chat" : n.id)}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors",
-              view === n.id ? "bg-white/[0.09] text-foreground" : "text-white/75 hover:bg-white/[0.05] hover:text-foreground",
-            )}
-          >
-            <n.icon size={16} className="text-white/60" /> {n.label}
-          </button>
+          <NavRow key={n.id} icon={n.icon} label={n.label} active={view === n.id} onClick={() => onView(view === n.id ? "chat" : n.id)} />
         ))}
       </nav>
 
-      <div className="mt-5 flex items-center px-5 pb-1 text-[12.5px] text-white/50">
-        Workspace
-        <span className="ml-auto flex items-center gap-2.5">
-          <button type="button" aria-label="Search sessions" onClick={onSearch} className="hover:text-foreground">
-            <Search size={14} />
-          </button>
-          <button type="button" aria-label="Filter" className="hover:text-foreground">
-            <ListFilter size={14} />
-          </button>
-          <button type="button" aria-label="New folder" className="hover:text-foreground">
-            <FolderPlus size={14} />
-          </button>
-        </span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         {actionError && (
           <p role="alert" className="mx-2 mb-1 rounded-md bg-rose/10 px-2 py-1.5 text-[12px] text-rose/90">
             {actionError}
           </p>
         )}
-        {groups.size === 0 && <p className="px-3 py-2 text-[12.5px] text-white/35">No workspaces. Start V.I.S.O.R. in a folder with vhud.</p>}
+        {groups.size === 0 && (
+          <div className="mx-1 rounded-xl border border-dashed border-white/[0.09] px-3 py-4 text-center">
+            <p className="text-[12.5px] text-white/45">No workspaces in the sidebar</p>
+            <p className="mt-1 text-[11.5px] text-white/30">Send a message to start one in this folder, or run vhud in another folder.</p>
+          </div>
+        )}
         {[...groups.entries()].map(([path, list]) => {
           const name = folderOf(path);
           return (
@@ -196,27 +173,56 @@ export function Sidebar({
             </WorkspaceGroup>
           );
         })}
+        {hiddenCount > 0 && (
+          <button type="button" onClick={showHidden} className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[12px] text-white/40 hover:bg-white/[0.04] hover:text-white/75">
+            <Eye size={13} /> Show {hiddenCount} hidden workspace{hiddenCount === 1 ? "" : "s"}
+          </button>
+        )}
       </div>
 
-      <button type="button" onClick={onWallet} className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]" aria-label="Open credit wallet">
-        <span className="flex size-8 items-center justify-center rounded-full bg-white/[0.09] text-white/70">
-          <Wallet size={15} />
+      <button
+        type="button"
+        onClick={onWallet}
+        className="group mx-2 mb-2 flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.05]"
+        aria-label="Open credit wallet"
+      >
+        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full", live ? "bg-indigo/20 text-indigo" : "bg-white/[0.09] text-white/60")}>
+          <Wallet size={14} />
         </span>
-        <span className="min-w-0 leading-tight">
-          <span className="block text-[13px] text-foreground">{live ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}</span>
-          <span className="block text-[11.5px] text-white/50">
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-[13px] text-foreground">
             {wallet?.active ? (
               <>
-                <Usd micro={Math.max(0, wallet.balanceMicroUsd - spending)} decimals={2} /> credit left
+                <Usd micro={Math.max(0, wallet.balanceMicroUsd - spending)} decimals={2} /> credit
               </>
             ) : (
-              "Set up prepaid credit"
+              "Set up credit"
             )}
           </span>
+          <span className="block truncate text-[11.5px] text-white/45">{live ? "Live · Claude Agent SDK" : "Mock runtime · $0 spend"}</span>
         </span>
+        <ChevronRight size={14} className="shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60" />
       </button>
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </aside>
+  );
+}
+
+function NavRow({ icon: Icon, label, hint, active, onClick }: { icon: typeof Plus; label: string; hint?: string; active?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex w-full items-center gap-3 rounded-lg px-3 py-[7px] text-left text-[13.5px] transition-colors",
+        active ? "bg-white/[0.09] text-foreground" : "text-white/80 hover:bg-white/[0.05] hover:text-foreground",
+      )}
+    >
+      <Icon size={16} className={cn("shrink-0", active ? "text-foreground" : "text-white/55 group-hover:text-white/80")} />
+      <span className="truncate">{label}</span>
+      {hint && <kbd className="ml-auto font-sans text-[11px] text-white/30">{hint}</kbd>}
+    </button>
   );
 }
 
