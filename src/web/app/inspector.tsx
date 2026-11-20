@@ -3,19 +3,21 @@ import { CompactionTimeline, ContextSummary } from "@/components/visor/context-p
 import { CostReceipt } from "@/components/visor/cost-receipt";
 import { Payload } from "@/components/visor/payload";
 import { Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
+import { SourcesPanel } from "@/components/visor/sources-panel";
 import { ReplayBar, Waterfall } from "@/components/visor/waterfall";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 
-export type InspectorTab = "context" | "payload" | "cost" | "timeline";
+export type InspectorTab = "context" | "payload" | "cost" | "timeline" | "sources";
 const TABS: { id: InspectorTab; label: string }[] = [
   { id: "context", label: "Context" },
   { id: "payload", label: "Payload" },
   { id: "cost", label: "Cost" },
   { id: "timeline", label: "Timeline" },
+  { id: "sources", label: "Sources" },
 ];
 
-/** The right panel: Context (7 categories), Payload, Cost receipt, and the span Timeline with replay. */
+/** The right panel: Context (7 categories), Payload, Cost receipt, the span Timeline with replay, and Sources. */
 export function Inspector({
   model,
   selectedId,
@@ -98,6 +100,7 @@ export function Inspector({
             </div>
           </div>
         )}
+        {tab === "sources" && <SourcesPanel model={model} onSelect={onSelect} />}
         {tab === "timeline" && (
           <div className="flex h-full flex-col">
             <ReplayBar className="border-b border-white/[0.07] px-3 py-2" />
