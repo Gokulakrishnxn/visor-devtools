@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Eye, EyeOff, MoreHorizontal, PanelLeftClose,
 import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
-import { useSession, type StoredSession } from "@/stores/session-store";
+import { isChatFolder, NO_FOLDER, useSession, type StoredSession } from "@/stores/session-store";
 
 const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
@@ -67,7 +67,11 @@ export function Sidebar({
 
   // Sessions grouped by workspace folder, this workspace first
   const groups = new Map<string, StoredSession[]>([[here, []]]);
-  for (const s of stored) groups.set(s.workspacePath, [...(groups.get(s.workspacePath) ?? []), s]);
+  // No-folder chats each have their own scratch folder; list them together
+  for (const s of stored) {
+    const key = isChatFolder(s.workspacePath, info) ? NO_FOLDER : s.workspacePath;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
   // Removed folders stay hidden until a session starts there after the removal
   let hiddenCount = 0;
   for (const [path, at] of Object.entries(hidden)) {
@@ -119,7 +123,7 @@ export function Sidebar({
         )}
         {[...groups.entries()].map(([path, list]) => {
           // One folder: a plain "Recents" list like the Claude app; several: one heading per folder
-          const name = groups.size === 1 ? "Recents" : folderOf(path);
+          const name = path === NO_FOLDER ? "No folder" : groups.size === 1 ? "Recents" : folderOf(path);
           return (
             <WorkspaceGroup
               key={path}
@@ -139,7 +143,15 @@ export function Sidebar({
                             title: `Delete all sessions in ${name}?`,
                             body: `This removes ${list.length} session${list.length === 1 ? "" : "s"} and their history from V.I.S.O.R. Your files in this folder are not touched.`,
                             action: "Delete all",
-                            run: () => void act(() => deleteWorkspace(path)),
+                            run: () =>
+                              void act(async () => {
+                                if (path !== NO_FOLDER) return deleteWorkspace(path);
+                                for (const s of list) {
+                                  const err = await deleteSession(s.id);
+                                  if (err) return err;
+                                }
+                                return null;
+                              }),
                           }),
                       },
                     ]

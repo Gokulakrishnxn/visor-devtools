@@ -6,7 +6,7 @@ import { CommandPalette } from "@/components/visor/command-palette";
 import { Kbd } from "@/components/visor/primitives";
 import { useHarness } from "@/hooks/use-harness";
 import { useDesktopNotifications } from "@/hooks/use-notifications";
-import { useSession } from "@/stores/session-store";
+import { NO_FOLDER, useSession } from "@/stores/session-store";
 import { cn } from "@/lib/utils";
 import { Composer, type ComposerValue } from "./composer";
 import { Conversation } from "./conversation";
@@ -206,7 +206,7 @@ export function HarnessApp() {
                     {h.connection === "open" && (
                       <p className="mt-2 text-[13.5px] text-white/45">
                         {live ? "Live mode: every prompt runs the real Claude Agent SDK in " : "Mock mode: a free demo run. Start the daemon with --live for real runs in "}
-                        <span className="font-mono text-white/60">{folder ?? info?.workspacePath}</span>
+                        <span className="font-mono text-white/60">{folder === NO_FOLDER ? "a new empty scratch folder (No folder)" : (folder ?? info?.workspacePath)}</span>
                       </p>
                     )}
                   </div>

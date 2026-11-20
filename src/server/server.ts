@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize } from "node:path";
 import { serve, type ServerType } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import type { VisorEvent } from "@shared/events";
 import { createApp, requireToken } from "./app";
-import { openDatabase } from "./db/client";
+import { DEFAULT_DB_PATH, openDatabase } from "./db/client";
 import { TraceRecorder } from "./db/recorder";
 import { MockRuntimeAdapter } from "./runtime/mock-adapter";
 import { ClaudeSdkAdapter } from "./runtime/claude-sdk-adapter";
@@ -89,6 +89,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     store: new TraceStore(db),
     wallet,
     maxCapMicroUsd: opts.capMicroUsd ?? config.budget.sessionCapUsd ?? null,
+    chatsRoot: join(dirname(opts.dbPath ?? DEFAULT_DB_PATH), "chats"),
     info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

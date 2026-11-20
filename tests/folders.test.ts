@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -43,5 +43,26 @@ describe("open a folder", () => {
     expect((await start(join(root, "missing"))).status).toBe(400);
     expect((await start(join(root, "notes.txt"))).status).toBe(400);
     expect(existingFolder(join(root, "site", ".."))).toBe(root);
+  });
+
+  it("gives each No folder chat its own empty, private scratch folder", async () => {
+    const chatsRoot = join(realpathSync(mkdtempSync(join(tmpdir(), "visor-chats-"))), "chats");
+    const runner = new SessionRunner({ adapter: new MockRuntimeAdapter({ speed: 0 }) });
+    const started: string[] = [];
+    runner.subscribe((e) => {
+      if (e.type === "session.started") started.push(e.workspacePath);
+      if (e.type === "breakpoint.paused") queueMicrotask(() => runner.resolveBreakpoint(e.spanId, { decision: "denied" }));
+    });
+    const app = createApp({ runner, token: "t", workspacePath: root, chatsRoot });
+    const res = await app.request("/api/sessions", { method: "POST", headers: auth, body: JSON.stringify({ prompt: "hi", noFolder: true, workspacePath: root }) });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    await expect.poll(() => started.length).toBe(1);
+    expect(started[0]).toBe(join(chatsRoot, sessionId)); // noFolder wins over a folder
+    expect(statSync(started[0]!).mode & 0o777).toBe(0o700);
+    expect(readdirSync(started[0]!)).toEqual([]);
+    expect(await (await app.request("/api/info", { headers: auth })).json()).toMatchObject({ chatsRoot });
+    // Without a chats folder configured, No folder is refused
+    const plain = createApp({ runner, token: "t", workspacePath: root });
+    expect((await plain.request("/api/sessions", { method: "POST", headers: auth, body: JSON.stringify({ prompt: "hi", noFolder: true }) })).status).toBe(400);
   });
 });

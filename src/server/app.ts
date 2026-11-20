@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { type Dirent, readdirSync, realpathSync, statSync } from "node:fs";
+import { type Dirent, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -31,6 +31,8 @@ export type AppDeps = {
   maxCapMicroUsd?: number | null;
   /** Looks up the signed-in Claude profile (tests pass a fake). */
   profile?: () => Promise<ClaudeProfile>;
+  /** Where no-folder chats get their scratch folders (~/.visor/chats). */
+  chatsRoot?: string;
 };
 
 const Amount = z.object({ amountUsd: z.string().max(20), note: z.string().max(200).optional() });
@@ -43,6 +45,8 @@ const StartSession = z.object({
   capUsd: z.string().optional(),
   /** The folder Claude works in (absolute path); defaults to the folder vhud started in. */
   workspacePath: z.string().max(4096).optional(),
+  /** "No folder": Claude works in a fresh, empty scratch folder of its own (~/.visor/chats/<id>). */
+  noFolder: z.boolean().optional(),
 });
 
 /** The real path of an existing folder, or null (relative paths, files and missing paths are refused). */
@@ -76,7 +80,7 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile, chatsRoot }: AppDeps) {
   const limitCap = (requested: number | null) => (maxCapMicroUsd === null ? requested : requested === null ? maxCapMicroUsd : Math.min(requested, maxCapMicroUsd));
   const app = new Hono();
 
@@ -89,7 +93,13 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const body = StartSession.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: "invalid request", issues: body.error.issues }, 400);
     const { prompt, modelId, effort, capUsd } = body.data;
-    const folder = body.data.workspacePath ? existingFolder(body.data.workspacePath) : workspacePath;
+    const sessionId = ulid();
+    let folder: string | null;
+    if (body.data.noFolder) {
+      if (!chatsRoot) return c.json({ error: "No-folder chats aren't available here." }, 400);
+      folder = join(chatsRoot, sessionId);
+      mkdirSync(folder, { recursive: true, mode: 0o700 });
+    } else folder = body.data.workspacePath ? existingFolder(body.data.workspacePath) : workspacePath;
     if (!folder) return c.json({ error: "That folder doesn't exist or isn't a folder." }, 400);
     // Only the mock runtime has a built-in demo; a real run needs something to do
     if (info.runtime === "claude" && !prompt.trim()) return c.json({ error: "Type a message first" }, 400);
@@ -102,7 +112,6 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     // Once you've set credit, a live run can never spend more than what's left
     const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(requested) : { cap: requested, limitedByCredit: false };
     if (cap === 0 && limitedByCredit) return c.json({ error: "No credit left. Add credit in the wallet to start a live run." }, 402);
-    const sessionId = ulid();
     // Fire and forget: progress streams over the WebSocket
     runner
       .run({ sessionId, prompt, workspacePath: folder, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
@@ -195,7 +204,7 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ path, parent: parent === path ? null : parent, home: homedir(), folders });
   });
 
-  api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, maxCapMicroUsd, ...info }));
+  api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, maxCapMicroUsd, chatsRoot: chatsRoot ?? null, ...info }));
 
   api.get("/sessions", (c) => c.json({ sessions: store?.listSessions() ?? [] }));
 
