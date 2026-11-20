@@ -10,6 +10,8 @@ import { parseUsd } from "@shared/money";
 import type { TraceStore } from "./db/queries";
 import type { Wallet } from "./wallet";
 import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
+import { writeCommitMessage } from "./commit-message";
+import { commit, diffForMessage, gitState, simpleMessage, switchBranch } from "./git";
 import { claudeProfile, type ClaudeProfile } from "./profile";
 import { followUpFrom, type SessionRunner } from "./runtime/session-runner";
 
@@ -31,6 +33,8 @@ export type AppDeps = {
   maxCapMicroUsd?: number | null;
   /** Looks up the signed-in Claude profile (tests pass a fake). */
   profile?: () => Promise<ClaudeProfile>;
+  /** Writes a commit message from a diff (tests pass a fake; live uses Claude). */
+  commitWriter?: (diff: string, cwd: string) => Promise<{ message: string; costMicroUsd: number }>;
   /** Where no-folder chats get their scratch folders (~/.visor/chats). */
   chatsRoot?: string;
 };
@@ -80,7 +84,7 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile, chatsRoot }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile, chatsRoot, commitWriter = writeCommitMessage }: AppDeps) {
   const limitCap = (requested: number | null) => (maxCapMicroUsd === null ? requested : requested === null ? maxCapMicroUsd : Math.min(requested, maxCapMicroUsd));
   const app = new Hono();
 
@@ -202,6 +206,51 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
       .slice(0, 500);
     const parent = dirname(path);
     return c.json({ path, parent: parent === path ? null : parent, home: homedir(), folders });
+  });
+
+  // Source control for the folder you work in: branch, changes, commit
+  const GitTarget = z.object({ path: z.string().max(4096).optional(), paths: z.array(z.string().min(1).max(4096)).max(2000).optional() });
+  const repoOf = (path?: string) => existingFolder(path || workspacePath);
+  api.get("/git", async (c) => {
+    const cwd = repoOf(c.req.query("path"));
+    if (!cwd) return c.json({ error: "That folder doesn't exist." }, 404);
+    return c.json({ path: cwd, ...(await gitState(cwd)) });
+  });
+  api.post("/git/branch", async (c) => {
+    const body = GitTarget.extend({ name: z.string().max(100), create: z.boolean().default(false) }).safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "invalid request" }, 400);
+    const cwd = repoOf(body.data.path);
+    if (!cwd) return c.json({ error: "That folder doesn't exist." }, 404);
+    const error = await switchBranch(cwd, body.data.name.trim(), body.data.create);
+    return error ? c.json({ error }, 400) : c.json({ path: cwd, ...(await gitState(cwd)) });
+  });
+  api.post("/git/commit", async (c) => {
+    const body = GitTarget.extend({ message: z.string().max(5000) }).safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "invalid request" }, 400);
+    const cwd = repoOf(body.data.path);
+    if (!cwd) return c.json({ error: "That folder doesn't exist." }, 404);
+    const r = await commit(cwd, body.data.message, body.data.paths);
+    return r.ok ? c.json({ id: r.id, path: cwd, ...(await gitState(cwd)) }) : c.json({ error: r.error }, 400);
+  });
+  api.post("/git/message", async (c) => {
+    const body = GitTarget.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "invalid request" }, 400);
+    const cwd = repoOf(body.data.path);
+    if (!cwd) return c.json({ error: "That folder doesn't exist." }, 404);
+    const state = await gitState(cwd);
+    if (!state.repo) return c.json({ error: "This folder isn't a git repository." }, 400);
+    const files = body.data.paths?.length ? state.files.filter((f) => body.data.paths!.includes(f.path)) : state.files;
+    if (!files.length) return c.json({ error: "There are no changes to commit." }, 400);
+    // Mock runtime: a plain summary, no AI and no cost
+    if (info.runtime !== "claude") return c.json({ message: simpleMessage(files), costMicroUsd: 0, ai: false });
+    if (wallet && wallet.effectiveCap(null).cap === 0) return c.json({ error: "No credit left. Add credit in the wallet first." }, 402);
+    try {
+      const { message, costMicroUsd } = await commitWriter(await diffForMessage(cwd, body.data.paths), cwd);
+      wallet?.chargeExtra(costMicroUsd, "Commit message (AI)");
+      return c.json({ message, costMicroUsd, ai: true });
+    } catch (err) {
+      return c.json({ error: (err as Error).message || "Couldn't write a message" }, 502);
+    }
   });
 
   api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, maxCapMicroUsd, chatsRoot: chatsRoot ?? null, ...info }));

@@ -9,6 +9,17 @@ type Listing = { path: string; parent: string | null; home: string; folders: { n
 const nameOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 const tilde = (path: string, home?: string) => (home && path.startsWith(home) ? `~${path.slice(home.length)}` : path);
 
+/** The folder Claude works in right now: the open session's, else the one you picked (NO_FOLDER for no-folder chats). */
+export function useCurrentFolder(): string | null {
+  const info = useSession((s) => s.info);
+  const sessions = useSession((s) => s.sessions);
+  const sessionId = useSession((s) => s.sessionId);
+  const chosen = useSession((s) => s.folder);
+  const open = sessions.find((s) => s.id === sessionId);
+  const openPath = open ? (isChatFolder(open.workspacePath, info) ? NO_FOLDER : open.workspacePath) : null;
+  return openPath ?? chosen ?? info?.workspacePath ?? null;
+}
+
 /**
  * The folder button in the prompt box, like the Claude app's: shows where
  * Claude works, lists recent folders, and opens a folder browser.
@@ -16,7 +27,6 @@ const tilde = (path: string, home?: string) => (home && path.startsWith(home) ? 
 export function FolderButton({ disabled }: { disabled?: boolean }) {
   const info = useSession((s) => s.info);
   const sessions = useSession((s) => s.sessions);
-  const sessionId = useSession((s) => s.sessionId);
   const chosen = useSession((s) => s.folder);
   const setFolder = useSession((s) => s.setFolder);
   const clear = useSession((s) => s.clear);
@@ -25,9 +35,7 @@ export function FolderButton({ disabled }: { disabled?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
 
   // An open session shows its own folder; a new one uses the folder you picked
-  const open = sessions.find((s) => s.id === sessionId);
-  const openPath = open ? (isChatFolder(open.workspacePath, info) ? NO_FOLDER : open.workspacePath) : null;
-  const current = openPath ?? chosen ?? info?.workspacePath ?? null;
+  const current = useCurrentFolder();
   const noFolder = current === NO_FOLDER;
   const recents = [...new Set([chosen, info?.workspacePath, ...sessions.map((s) => s.workspacePath)].filter((p): p is string => Boolean(p) && p !== NO_FOLDER && !isChatFolder(p!, info)))].slice(0, 6);
 
