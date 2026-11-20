@@ -141,6 +141,8 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
         break;
       case "turn.started":
         compactedThisTurn = false;
+        // A follow-up message reopens a finished session
+        if (m.session && e.turnIndex > 0) m.session = { ...m.session, status: "running" };
         m.turns.push({ turnId: e.turnId, index: e.turnIndex, prompt: e.prompt, startedAt: e.at, rootSpanIds: [] });
         break;
       case "span.started": {

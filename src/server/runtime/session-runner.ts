@@ -6,7 +6,32 @@ import { editOutsideWorkspace, PolicyEngine } from "../interceptor/policy";
 import { TriggerEngine, type TriggerAlert } from "../interceptor/triggers";
 import { UsageLedger } from "../telemetry/cost";
 import { PricingRegistry } from "../telemetry/pricing";
-import type { AgentRuntimeAdapter, RunOptions, ToolUseRequest, ToolUseVerdict } from "./adapter";
+import type { AgentRuntimeAdapter, FollowUp, RunOptions, ToolUseRequest, ToolUseVerdict } from "./adapter";
+
+/**
+ * What a follow-up message needs from a session's event log: its settings,
+ * the next turn index, the runtime session to resume and what it spent so far.
+ * null when the log has no session.started.
+ */
+export function followUpFrom(events: VisorEvent[]): { followUp: FollowUp; title: string; workspacePath: string; modelId: string; effort: RunOptions["effort"] } | null {
+  const started = events.find((e) => e.type === "session.started");
+  if (started?.type !== "session.started") return null;
+  let turnIndex = 0;
+  let resumeId: string | undefined;
+  let priorCostMicroUsd = 0;
+  for (const e of events) {
+    if (e.type === "turn.started") turnIndex = Math.max(turnIndex, e.turnIndex + 1);
+    if (e.type === "turn.ended" && e.runtimeSessionId) resumeId = e.runtimeSessionId;
+    if (e.type === "session.ended") priorCostMicroUsd = e.totalCostMicroUsd;
+  }
+  return {
+    followUp: { turnIndex, resumeId, priorCostMicroUsd },
+    title: started.title,
+    workspacePath: started.workspacePath,
+    modelId: started.modelId,
+    effort: started.effort,
+  };
+}
 
 export type Listener = (event: VisorEvent) => void;
 
@@ -80,9 +105,15 @@ export class SessionRunner {
   }
 
   /** Runs a session to completion. Resolves with the session's final status. */
-  async run(input: Omit<RunOptions, "sessionId"> & { sessionId?: string }): Promise<VisorEvent[]> {
-    const options: RunOptions = { ...input, sessionId: input.sessionId ?? ulid() };
+  async run(input: Omit<RunOptions, "sessionId"> & { sessionId?: string; priorEvents?: VisorEvent[] }): Promise<VisorEvent[]> {
+    const { priorEvents, ...rest } = input;
+    const options: RunOptions = { ...rest, sessionId: rest.sessionId ?? ulid() };
     const { sessionId } = options;
+    if (this.controllers.has(sessionId)) throw new Error(`Session ${sessionId} is already running`);
+    // A follow-up continues the session's log (it may only be on disk after a restart)
+    if (priorEvents?.length && !this.history.get(sessionId)?.length) this.history.set(sessionId, [...priorEvents]);
+    // Session totals include what earlier messages spent
+    const prior = options.followUp?.priorCostMicroUsd ?? 0;
     const controller = new AbortController();
     this.controllers.set(sessionId, controller);
     const watchdog = new BudgetWatchdog(options.budgetCapMicroUsd, this.deps.turnCapMicroUsd ?? null);
@@ -169,11 +200,11 @@ export class SessionRunner {
           turnSpend.add(event.messageId, event.modelId, event.usage);
           if (watchdog.check(spent(), turnSpent()).status === "exceeded") abortForBudget();
         }
-        this.emit(event);
+        this.emit(event.type === "session.ended" && prior ? { ...event, totalCostMicroUsd: event.totalCostMicroUsd + prior } : event);
         if (event.type === "usage" && fresh) this.triggers.onUsage(event.usage).forEach((a) => alert(a, event.spanId));
       }
     } catch (err) {
-      this.emit({ type: "session.ended", sessionId, status: "error", totalCostMicroUsd: spent(), at: this.now() });
+      this.emit({ type: "session.ended", sessionId, status: "error", totalCostMicroUsd: prior + spent(), at: this.now() });
       throw err;
     } finally {
       this.controllers.delete(sessionId);

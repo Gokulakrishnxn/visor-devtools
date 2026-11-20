@@ -7,7 +7,7 @@ import { parseUsd } from "@shared/money";
 import type { TraceStore } from "./db/queries";
 import type { Wallet } from "./wallet";
 import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
-import type { SessionRunner } from "./runtime/session-runner";
+import { followUpFrom, type SessionRunner } from "./runtime/session-runner";
 
 export type AppDeps = {
   runner: SessionRunner;
@@ -83,6 +83,41 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
       .run({ sessionId, prompt, workspacePath, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
       .catch((err: unknown) => console.error(`[visor] session ${sessionId} failed:`, err));
     return c.json({ sessionId, capMicroUsd: cap, limitedByCredit }, 202);
+  });
+
+  // A follow-up message in an existing session: Claude resumes the same conversation
+  api.post("/sessions/:id/messages", async (c) => {
+    const id = c.req.param("id");
+    const body = StartSession.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: "invalid request", issues: body.error.issues }, 400);
+    if (!body.data.prompt.trim()) return c.json({ error: "Type a message first" }, 400);
+    if (runner.isRunning(id)) return c.json({ error: "This session is still running. Wait for it to finish or stop it." }, 409);
+    const live = runner.events(id);
+    const prior: VisorEvent[] = live.length ? live : (store?.events(id) ?? []);
+    const from = followUpFrom(prior);
+    if (!from) return c.json({ error: "Session not found" }, 404);
+    let requested: number | null;
+    try {
+      requested = body.data.capUsd ? parseUsd(body.data.capUsd) : defaultCapMicroUsd;
+    } catch {
+      return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
+    }
+    const { cap, limitedByCredit } = wallet ? wallet.effectiveCap(requested) : { cap: requested, limitedByCredit: false };
+    if (cap === 0 && limitedByCredit) return c.json({ error: "No credit left. Add credit in the wallet to start a live run." }, 402);
+    runner
+      .run({
+        sessionId: id,
+        prompt: body.data.prompt,
+        title: from.title,
+        workspacePath: from.workspacePath,
+        modelId: body.data.modelId ?? from.modelId,
+        effort: body.data.effort ?? from.effort,
+        budgetCapMicroUsd: cap,
+        followUp: from.followUp,
+        priorEvents: prior,
+      })
+      .catch((err: unknown) => console.error(`[visor] session ${id} failed:`, err));
+    return c.json({ sessionId: id, capMicroUsd: cap, limitedByCredit }, 202);
   });
 
   api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, ...info }));

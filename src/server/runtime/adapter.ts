@@ -9,6 +9,18 @@ export type RunOptions = {
   modelId: string;
   effort: Effort;
   budgetCapMicroUsd: MicroUsd | null;
+  /** Set when this prompt continues an existing session instead of starting one. */
+  followUp?: FollowUp;
+};
+
+/** A follow-up message in an existing session. */
+export type FollowUp = {
+  /** Index of the turn this message starts. */
+  turnIndex: number;
+  /** The runtime's session to resume, so Claude remembers the conversation. */
+  resumeId?: string;
+  /** What the session spent before this message. */
+  priorCostMicroUsd: MicroUsd;
 };
 
 /** A tool call the runtime wants to make; the harness decides if it may run. */
