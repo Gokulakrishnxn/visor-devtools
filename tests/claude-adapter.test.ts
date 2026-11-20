@@ -177,6 +177,9 @@ describe("persistence and config for Phase 3", () => {
     const replay = (await (await app.request("/api/sessions/stored/events", { headers: auth })).json()) as { events: unknown[] };
     expect(replay.events).toHaveLength(events.length);
     expect(await (await app.request("/api/info", { headers: auth })).json()).toMatchObject({ runtime: "claude", workspacePath: "/w/acme" });
+    // A real run never starts without a message (it would spend money on nothing)
+    const empty = await app.request("/api/sessions", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ prompt: "  " }) });
+    expect(empty.status).toBe(400);
   });
 
   it("continues a session with a follow-up message, even after a restart", async () => {
