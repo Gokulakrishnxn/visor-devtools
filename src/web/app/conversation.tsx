@@ -4,6 +4,7 @@ import { ChevronRight, ChevronUp, FileCode2, FileJson2, FileText as FileTextIcon
 import { BreakpointCard } from "@/components/visor/breakpoint-card";
 import { Markdown } from "@/components/visor/markdown";
 import { SourceChips } from "@/components/visor/site-icon";
+import { CondensedNote } from "@/components/visor/ctx-output";
 import { diffStats } from "@/components/visor/code";
 import { SPAN_ICON, StatusDot, Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
 import type { TraceModel, TraceSpan, TraceTurn } from "@/lib/trace-model";
@@ -117,6 +118,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
                   alerts={model.alerts.filter((a) => a.spanId === span.spanId && !a.id.startsWith("bp-") && !a.id.startsWith("spike-"))}
                   agent={span.spanType === "subagent" ? model.agents.find((a) => a.spanId === span.spanId) : undefined}
                   depth={depth}
+                  folder={model.session?.workspacePath}
                   selected={selectedId === span.spanId}
                   onClick={() => {
                     onSelect(span.spanId);
@@ -149,7 +151,23 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
   );
 }
 
-function Step({ span, depth, selected, onClick, alerts, agent }: { span: TraceSpan; depth: number; selected: boolean; onClick: () => void; alerts: TraceModel["alerts"]; agent?: TraceModel["agents"][number] }) {
+function Step({
+  span,
+  depth,
+  selected,
+  onClick,
+  alerts,
+  agent,
+  folder,
+}: {
+  span: TraceSpan;
+  depth: number;
+  selected: boolean;
+  onClick: () => void;
+  alerts: TraceModel["alerts"];
+  agent?: TraceModel["agents"][number];
+  folder?: string;
+}) {
   const [open, setOpen] = useState(false);
   const Icon = SPAN_ICON[span.spanType];
   const isFile = span.spanType === "read" || span.spanType === "edit";
@@ -198,6 +216,7 @@ function Step({ span, depth, selected, onClick, alerts, agent }: { span: TraceSp
       </button>
       {failed && span.error && <p className="pb-1 pl-[34px] text-[12.5px] text-rose/90">{span.error}</p>}
       {span.breakpoint?.decision === "edited" && <p className="pb-1 pl-[34px] text-[12.5px] text-amber/90">Edited before it ran</p>}
+      {span.condensed && <CondensedNote condensed={span.condensed} folder={folder} />}
       {alerts.map((a) => (
         <p key={a.id} className={cn("pb-1 pl-[34px] text-[12.5px]", a.level === "danger" ? "text-rose/90" : "text-amber/90")}>
           {a.title} · <span className="text-white/45">{a.detail}</span>

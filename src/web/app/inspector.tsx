@@ -80,6 +80,12 @@ export function Inspector({
         {tab === "cost" && (
           <div className="space-y-6 p-4">
             <CostReceipt model={model} />
+            {model.condensed.outputs > 0 && (
+              <p className="rounded-lg border border-emerald/20 bg-emerald/[0.06] px-3 py-2 text-[12.5px] text-emerald/90">
+                Straitjacket kept about {fmtTokens(model.condensed.tokensSaved)} tokens of shell output out of Claude's context ({model.condensed.outputs} output
+                {model.condensed.outputs === 1 ? "" : "s"} condensed). Later turns don't pay for them again.
+              </p>
+            )}
             <div>
               <p className="mb-2 text-[12px] text-white/45">By agent</p>
               <table className="w-full text-[12.5px]">

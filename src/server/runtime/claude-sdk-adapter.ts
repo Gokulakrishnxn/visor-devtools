@@ -1,4 +1,5 @@
-import { query as sdkQuery, type HookCallback, type Options, type PreToolUseHookInput, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query as sdkQuery, type HookCallback, type Options, type PostToolUseHookInput, type PreToolUseHookInput, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { condense as straitjacketCondense, replacedOutput, type CondenseOptions, type Condensed } from "../straitjacket";
 import { ulid } from "ulid";
 import type { ContextBreakdown, ContextDetail, SpanType, VisorEvent } from "@shared/events";
 import { parseUsd } from "@shared/money";
@@ -18,6 +19,10 @@ export type ClaudeSdkAdapterOptions = {
   mcpServers?: Options["mcpServers"];
   /** Your Claude skills to load ("all" or names). Unset keeps runs isolated from your user settings. */
   skills?: "all" | string[];
+  /** Straitjacket: condense big shell output through `ctx intake` (null = off). */
+  straitjacket?: CondenseOptions | null;
+  /** Injectable for tests; defaults to running `ctx`. */
+  condense?: (output: unknown, toolInput: Record<string, unknown>, cwd: string, opts: CondenseOptions) => Promise<Condensed | null>;
   now?: () => number;
   newId?: () => string;
 };
@@ -275,6 +280,34 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
     };
 
     // PreToolUse: every tool call starts a span here, then the harness decides.
+    // After a shell command: a big result goes through Straitjacket, and Claude gets its digest
+    const postToolUse: HookCallback = async (input) => {
+      const h = input as PostToolUseHookInput;
+      const sj = this.opts.straitjacket;
+      if (!sj || (h.tool_name !== "Bash" && h.tool_name !== "BashOutput")) return {};
+      const call = toolCalls.get(h.tool_use_id);
+      try {
+        const done = await (this.opts.condense ?? straitjacketCondense)(h.tool_response, (h.tool_input ?? {}) as Record<string, unknown>, options.workspacePath, sj);
+        if (!done) return {};
+        if (call?.spanId)
+          emit({
+            type: "output.condensed",
+            sessionId,
+            spanId: call.spanId,
+            tool: h.tool_name,
+            handle: done.handle,
+            originalChars: done.originalChars,
+            digestChars: done.digest.length,
+            originalTokens: Math.ceil(done.originalChars / 4),
+            digestTokens: Math.ceil(done.digest.length / 4),
+            at: this.now(),
+          });
+        return { hookSpecificOutput: { hookEventName: "PostToolUse", updatedToolOutput: replacedOutput(h.tool_response, done.digest) } };
+      } catch {
+        return {}; // never break a run over the optional sidecar
+      }
+    };
+
     const preToolUse: HookCallback = async (input) => {
       const h = input as PreToolUseHookInput;
       const toolInput = (h.tool_input ?? {}) as Record<string, unknown>;
@@ -478,7 +511,10 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
       permissionMode: "default",
       // The PreToolUse hook already decided; allow anything that reaches the prompt
       canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
-      hooks: { PreToolUse: [{ hooks: [preToolUse], onFailure: "block" }] },
+      hooks: {
+        PreToolUse: [{ hooks: [preToolUse], onFailure: "block" }],
+        ...(this.opts.straitjacket ? { PostToolUse: [{ hooks: [postToolUse] }] } : {}),
+      },
       ...(options.budgetCapMicroUsd !== null ? { maxBudgetUsd: options.budgetCapMicroUsd / 1_000_000 } : {}),
       ...(this.opts.mcpServers ? { mcpServers: this.opts.mcpServers } : {}),
       // A follow-up resumes the same Claude conversation

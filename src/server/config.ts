@@ -20,6 +20,15 @@ export const VisorConfig = z
     // Defaults for the GUI's "pause before…" switches
     pause: PauseToggles.default({ bash: false, edits: false, mcpWrites: false }),
     triggers: z.array(Trigger).default([]),
+    // Straitjacket (optional, needs its `ctx` command): big shell output is stored by `ctx intake`
+    // and Claude sees a short digest. "auto" turns it on when `ctx` is installed.
+    straitjacket: z
+      .object({
+        enabled: z.union([z.boolean(), z.literal("auto")]).default("auto"),
+        minChars: z.number().int().min(2_000).max(10_000_000).default(20_000),
+        command: z.string().min(1).default("ctx"),
+      })
+      .default({ enabled: "auto", minChars: 20_000, command: "ctx" }),
     // Your Claude skills (personal ~/.claude/skills and enabled plugins): off unless listed.
     // "all" loads every one; a list loads only those (e.g. ["vercel:nextjs"]). Each adds tokens to every request.
     skills: z.union([z.literal("all"), z.array(z.string().min(1))]).optional(),

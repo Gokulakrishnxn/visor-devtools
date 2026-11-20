@@ -11,6 +11,7 @@ import type { TraceStore } from "./db/queries";
 import type { Wallet } from "./wallet";
 import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
 import { writeCommitMessage } from "./commit-message";
+import { ctxGet } from "./straitjacket";
 import { commit, diffForMessage, gitState, simpleMessage, switchBranch } from "./git";
 import { claudeProfile, type ClaudeProfile } from "./profile";
 import { followUpFrom, type SessionRunner } from "./runtime/session-runner";
@@ -206,6 +207,18 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
       .slice(0, 500);
     const parent = dirname(path);
     return c.json({ path, parent: parent === path ? null : parent, home: homedir(), folders });
+  });
+
+  // Straitjacket: page through the full output it stored (the digest Claude saw is in the step)
+  api.get("/ctx/output", async (c) => {
+    const cwd = existingFolder(c.req.query("path") || workspacePath);
+    const handle = c.req.query("handle") ?? "";
+    const from = Number(c.req.query("from") ?? 1);
+    const to = Math.min(Number(c.req.query("to") ?? from + 399), from + 999);
+    if (!cwd || !/^run:[0-9a-f]{6,64}$/.test(handle) || !Number.isInteger(from) || !Number.isInteger(to)) return c.json({ error: "invalid request" }, 400);
+    const command = (info.straitjacket as { command?: string } | null | undefined)?.command ?? "ctx";
+    const text = await ctxGet(command, handle, from, to, cwd);
+    return text === null ? c.json({ error: "Straitjacket couldn't return that output. Is `ctx` installed?" }, 502) : c.json({ handle, from, to, text });
   });
 
   // Source control for the folder you work in: branch, changes, commit

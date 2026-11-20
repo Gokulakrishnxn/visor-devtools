@@ -11,6 +11,7 @@
     { "type": "path", "pattern": "\\.env|id_rsa", "action": "block" },
     { "type": "tokens", "above": 200000, "action": "notify" }
   ],
+  "straitjacket": { "enabled": "auto", "minChars": 20000 },
   "mcpServers": {
     "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "."] },
     "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] }

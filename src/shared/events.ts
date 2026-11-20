@@ -153,6 +153,21 @@ export const VisorEvent = z.discriminatedUnion("type", [
     at,
   }),
   z.object({
+    /** Straitjacket stored a big tool result; Claude got its short digest instead. */
+    type: z.literal("output.condensed"),
+    sessionId: id,
+    spanId: id,
+    tool: z.string(),
+    /** The `run:` address to fetch the full output (ctx get / ctx search). */
+    handle: z.string().nullable(),
+    originalChars: z.number().int().nonnegative(),
+    digestChars: z.number().int().nonnegative(),
+    /** Rough token estimates (characters / 4), for the "tokens kept out" figure. */
+    originalTokens: tokens,
+    digestTokens: tokens,
+    at,
+  }),
+  z.object({
     type: z.literal("alert"),
     sessionId: id,
     level: z.enum(["info", "warning", "danger"]),
