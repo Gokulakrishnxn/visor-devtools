@@ -7,6 +7,7 @@ import { parseUsd } from "@shared/money";
 import type { TraceStore } from "./db/queries";
 import type { Wallet } from "./wallet";
 import { BUILT_IN_RULES, PauseToggles } from "./interceptor/policy";
+import { claudeProfile, type ClaudeProfile } from "./profile";
 import { followUpFrom, type SessionRunner } from "./runtime/session-runner";
 
 export type AppDeps = {
@@ -23,7 +24,10 @@ export type AppDeps = {
   /** Prepaid credit ledger; limits live runs once credit is set. */
   wallet?: Wallet;
   /** Cap used when a request doesn't name one (from .visor.json). */
-  defaultCapMicroUsd?: number | null;
+  /** The most one message may spend (from --cap or .visor.json); the prompt box can lower it, never raise it. */
+  maxCapMicroUsd?: number | null;
+  /** Looks up the signed-in Claude profile (tests pass a fake). */
+  profile?: () => Promise<ClaudeProfile>;
 };
 
 const Amount = z.object({ amountUsd: z.string().max(20), note: z.string().max(200).optional() });
@@ -56,7 +60,8 @@ export function requireToken(token: string): MiddlewareHandler {
 }
 
 /** The REST half of the daemon. WebSockets are attached in server.ts. */
-export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, defaultCapMicroUsd = null }: AppDeps) {
+export function createApp({ runner, token, workspacePath, defaultModel = "claude-opus-5-5", defaultEffort = "medium", store, info = {}, wallet, maxCapMicroUsd = null, profile: lookupProfile }: AppDeps) {
+  const limitCap = (requested: number | null) => (maxCapMicroUsd === null ? requested : requested === null ? maxCapMicroUsd : Math.min(requested, maxCapMicroUsd));
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ ok: true, name: "visor-devtools", runtime: "local" }));
@@ -72,7 +77,7 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     if (info.runtime === "claude" && !prompt.trim()) return c.json({ error: "Type a message first" }, 400);
     let requested: number | null;
     try {
-      requested = capUsd ? parseUsd(capUsd) : defaultCapMicroUsd;
+      requested = limitCap(capUsd ? parseUsd(capUsd) : null);
     } catch {
       return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
     }
@@ -100,7 +105,7 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     if (!from) return c.json({ error: "Session not found" }, 404);
     let requested: number | null;
     try {
-      requested = body.data.capUsd ? parseUsd(body.data.capUsd) : defaultCapMicroUsd;
+      requested = limitCap(body.data.capUsd ? parseUsd(body.data.capUsd) : null);
     } catch {
       return c.json({ error: "capUsd must be a dollar amount like 5 or 0.25" }, 400);
     }
@@ -148,7 +153,11 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ deleted });
   });
 
-  api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, ...info }));
+  // Your Claude profile (display name and plan) for the sidebar; looked up once
+  let profile: Promise<ClaudeProfile> | null = null;
+  api.get("/profile", async (c) => c.json(await (profile ??= (lookupProfile ?? claudeProfile)())));
+
+  api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, maxCapMicroUsd, ...info }));
 
   api.get("/sessions", (c) => c.json({ sessions: store?.listSessions() ?? [] }));
 

@@ -56,8 +56,8 @@ async function main() {
   const cap = values.cap ? parseUsd(values.cap) : null;
   const here = dirname(fileURLToPath(import.meta.url));
   const staticDir = [join(here, "web"), join(here, "../dist/web")].find((d) => existsSync(join(d, "index.html")));
-  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir, runtime: values.live ? "claude" : undefined });
-  const url = `${daemon.url}/?token=${daemon.token}${cap !== null ? `&cap=${cap}` : ""}`;
+  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir, runtime: values.live ? "claude" : undefined, capMicroUsd: cap });
+  const url = `${daemon.url}/?token=${daemon.token}`;
 
   console.log(`\n  V.I.S.O.R. ${VERSION} running at ${daemon.url}`);
   console.log(`  Workspace: ${process.cwd()}`);

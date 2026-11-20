@@ -51,7 +51,11 @@ export function HarnessApp() {
   const [drawer, setDrawer] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const startError = useSession((s) => s.error);
-  const [composer, setComposer] = useState<ComposerValue>({ modelId: "claude-opus-5-5", effort: "medium", capUsd: "5" });
+  const [composerRaw, setComposer] = useState<ComposerValue>({ modelId: "claude-opus-5-5", effort: "medium", capUsd: "5" });
+  // The prompt box never shows more than your --cap / .visor.json cap (the server enforces it too)
+  const maxCap = info?.maxCapMicroUsd ?? null;
+  const asked = Number(composerRaw.capUsd);
+  const composer = maxCap !== null && (!Number.isFinite(asked) || asked * 1_000_000 > maxCap) ? { ...composerRaw, capUsd: String(maxCap / 1_000_000) } : composerRaw;
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const spanCount = model.order.length;

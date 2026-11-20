@@ -113,7 +113,7 @@ describe("wallet API and caps", () => {
   function app(debit = true) {
     const { db, wallet } = setup(debit);
     const runner = new SessionRunner({ adapter: new MockRuntimeAdapter({ speed: 0 }), validate: true });
-    return { wallet, runner, app: createApp({ runner, token: "t", workspacePath: "/w", wallet, defaultCapMicroUsd: 3_000_000 }), db };
+    return { wallet, runner, app: createApp({ runner, token: "t", workspacePath: "/w", wallet, maxCapMicroUsd: 3_000_000 }), db };
   }
 
   it("adds and sets credit, validates amounts, and exports CSV", async () => {
@@ -135,6 +135,9 @@ describe("wallet API and caps", () => {
     const { app: a, wallet } = app();
     const start = async (body: object) => a.request("/api/sessions", { method: "POST", headers: auth, body: JSON.stringify(body) });
     expect(await (await start({})).json()).toMatchObject({ capMicroUsd: 3_000_000, limitedByCredit: false }); // .visor.json default
+    // --cap / .visor.json is a ceiling: the prompt box can go lower, never higher
+    expect(await (await start({ capUsd: "5" })).json()).toMatchObject({ capMicroUsd: 3_000_000 });
+    expect(await (await start({ capUsd: "1" })).json()).toMatchObject({ capMicroUsd: 1_000_000 });
     wallet.deposit(1_000_000);
     expect(await (await start({ capUsd: "5" })).json()).toMatchObject({ capMicroUsd: 1_000_000, limitedByCredit: true });
     wallet.setBalance(0);

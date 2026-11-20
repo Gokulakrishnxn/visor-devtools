@@ -5,7 +5,8 @@ import { deriveTrace, type TraceModel } from "@/lib/trace-model";
 
 type Connection = "idle" | "connecting" | "open" | "closed";
 
-export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number };
+export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number; maxCapMicroUsd?: number | null };
+export type ClaudeProfile = { name: string | null; plan: string | null };
 export type LedgerEntry = { id: string; sessionId: string | null; entryType: "deposit" | "debit" | "adjustment"; amountMicroUsd: number; balanceAfterMicroUsd: number; note: string | null; createdAt: number };
 export type WalletState = { enabled: boolean; active: boolean; balanceMicroUsd: number; entries: LedgerEntry[] };
 export type PauseToggles = { bash: boolean; edits: boolean; mcpWrites: boolean };
@@ -23,6 +24,8 @@ type SessionState = {
   selectedSpanId: string | null;
   error: string | null;
   info: DaemonInfo | null;
+  /** The Claude account signed in on this computer (name and plan only). */
+  profile: ClaudeProfile | null;
   sessions: StoredSession[];
   wallet: WalletState | null;
   toggles: PauseToggles | null;
@@ -56,13 +59,24 @@ type SessionState = {
 };
 
 const readToken = () => {
-  const fromUrl = new URLSearchParams(window.location.search).get("token");
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get("token");
+  let saved = false;
   try {
     if (fromUrl) sessionStorage.setItem("visor-token", fromUrl);
-    return fromUrl ?? sessionStorage.getItem("visor-token") ?? "";
+    saved = Boolean(fromUrl);
+    if (!fromUrl) return sessionStorage.getItem("visor-token") ?? "";
   } catch {
-    return fromUrl ?? "";
+    // no session storage: keep the token in the address so a reload still works
   }
+  // Clean address bar: the secret token stays in this tab only, not in the URL or history
+  if (saved) {
+    params.delete("token");
+    params.delete("cap");
+    const rest = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+  }
+  return fromUrl ?? "";
 };
 
 async function api<T>(token: string, path: string, init?: RequestInit): Promise<T> {
@@ -117,6 +131,7 @@ export const useSession = create<SessionState>((set, get) => ({
   cursor: null,
   selectedSpanId: null,
   error: null,
+  profile: null,
   info: null,
   sessions: [],
   wallet: null,
@@ -132,6 +147,7 @@ export const useSession = create<SessionState>((set, get) => ({
     ws.onopen = () => {
       set({ connection: "open", error: null });
       void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
+      void api<ClaudeProfile>(get().token, "/api/profile").then((profile) => set({ profile })).catch(() => undefined);
       void get().refreshSessions();
       void get().refreshWallet();
       void api<{ toggles: PauseToggles }>(get().token, "/api/policy").then((p) => set({ toggles: p.toggles })).catch(() => undefined);
