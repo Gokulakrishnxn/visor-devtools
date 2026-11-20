@@ -57,6 +57,16 @@ export class TraceStore {
     return this.db.delete(sessions).where(inArray(sessions.id, ids)).run().changes;
   }
 
+  /** Renames a session; returns false when it doesn't exist. */
+  renameSession(id: string, title: string): boolean {
+    return this.db.update(sessions).set({ title }).where(eq(sessions.id, id)).run().changes > 0;
+  }
+
+  /** A session's current title (it may have been renamed after it started). */
+  titleOf(id: string): string | undefined {
+    return this.db.select({ title: sessions.title }).from(sessions).where(eq(sessions.id, id)).get()?.title;
+  }
+
   /** IDs of every session recorded in a workspace folder. */
   sessionIdsIn(workspacePath: string): string[] {
     return this.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.workspacePath, workspacePath)).all().map((r) => r.id);

@@ -1,19 +1,12 @@
-import { useEffect, useState } from "react";
-import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown, EyeOff, FolderPlus, ListFilter, MoreHorizontal, PanelLeftClose, Pencil, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 import { useSession, type StoredSession } from "@/stores/session-store";
 
 const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-
-function ago(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 60) return "now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86_400)}d`;
-}
 
 const STATUS_DOT: Record<string, string> = {
   running: "bg-indigo animate-pulse",
@@ -56,8 +49,12 @@ export function Sidebar({
   const openSession = useSession((s) => s.open);
   const deleteSession = useSession((s) => s.deleteSession);
   const deleteWorkspace = useSession((s) => s.deleteWorkspace);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const remove = async (run: () => Promise<string | null>) => setDeleteError(await run());
+  const renameSession = useSession((s) => s.renameSession);
+  const hidden = useSession((s) => s.hiddenWorkspaces);
+  const hideWorkspace = useSession((s) => s.hideWorkspace);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const act = async (run: () => Promise<string | null>) => setActionError(await run());
+  const [confirm, setConfirm] = useState<{ title: string; body: string; action: string; run: () => void } | null>(null);
   const info = useSession((s) => s.info);
   const wallet = useSession((s) => s.wallet);
   const live = info?.runtime === "claude";
@@ -69,6 +66,10 @@ export function Sidebar({
   // Sessions grouped by workspace folder, this workspace first
   const groups = new Map<string, StoredSession[]>([[here, []]]);
   for (const s of stored) groups.set(s.workspacePath, [...(groups.get(s.workspacePath) ?? []), s]);
+  // Removed folders stay hidden until a session starts there after the removal
+  for (const [path, at] of Object.entries(hidden)) {
+    if (!(groups.get(path) ?? []).some((s) => s.startedAt > at)) groups.delete(path);
+  }
 
   const nav = [
     { id: "rules" as const, label: "Overrides & rules", icon: ShieldCheck },
@@ -132,40 +133,69 @@ export function Sidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        {deleteError && (
-          <p role="alert" className="mx-3 mt-1 rounded-md bg-rose/10 px-2 py-1.5 text-[12px] text-rose/90">
-            {deleteError}
+        {actionError && (
+          <p role="alert" className="mx-2 mb-1 rounded-md bg-rose/10 px-2 py-1.5 text-[12px] text-rose/90">
+            {actionError}
           </p>
         )}
-        {[...groups.entries()].map(([path, list]) => (
-          <Folder2
-            key={path}
-            name={folderOf(path)}
-            path={path}
-            open={isOpen(path)}
-            onToggle={() => setOpen((o) => ({ ...o, [path]: !isOpen(path) }))}
-            onDelete={list.length ? () => void remove(() => deleteWorkspace(path)) : undefined}
-          >
-            {list.length === 0 && <p className="py-1.5 pl-9 text-[12.5px] text-white/35">No sessions yet</p>}
-            {list.map((s) => {
-              const live = s.id === currentId ? model.session?.status : undefined;
-              return (
-                <SessionRow
-                  key={s.id}
-                  active={s.id === currentId}
-                  title={s.id === currentId && model.session ? model.session.title : s.title}
-                  dot={STATUS_DOT[live ?? s.status]}
-                  meta={ago(s.startedAt)}
-                  onClick={() => {
-                    onView("chat");
-                    void openSession(s.id);
-                  }}
-                  onDelete={() => void remove(() => deleteSession(s.id))}
-                />
-              );
-            })}
-          </Folder2>
-        ))}
+        {groups.size === 0 && <p className="px-3 py-2 text-[12.5px] text-white/35">No workspaces. Start V.I.S.O.R. in a folder with vhud.</p>}
+        {[...groups.entries()].map(([path, list]) => {
+          const name = folderOf(path);
+          return (
+            <WorkspaceGroup
+              key={path}
+              name={name}
+              path={path}
+              open={isOpen(path)}
+              onToggle={() => setOpen((o) => ({ ...o, [path]: !isOpen(path) }))}
+              menu={[
+                ...(list.length
+                  ? [
+                      {
+                        label: "Delete all sessions",
+                        icon: Trash2,
+                        danger: true,
+                        onSelect: () =>
+                          setConfirm({
+                            title: `Delete all sessions in ${name}?`,
+                            body: `This removes ${list.length} session${list.length === 1 ? "" : "s"} and their history from V.I.S.O.R. Your files in this folder are not touched.`,
+                            action: "Delete all",
+                            run: () => void act(() => deleteWorkspace(path)),
+                          }),
+                      },
+                    ]
+                  : []),
+                { label: "Remove from sidebar", icon: EyeOff, onSelect: () => hideWorkspace(path) },
+              ]}
+            >
+              {list.length === 0 && <p className="py-1.5 pl-3 text-[12.5px] text-white/30">No sessions yet</p>}
+              {list.map((s) => {
+                const status = (s.id === currentId ? model.session?.status : undefined) ?? s.status;
+                return (
+                  <SessionRow
+                    key={s.id}
+                    active={s.id === currentId}
+                    title={s.title}
+                    dot={status === "completed" ? undefined : STATUS_DOT[status]}
+                    onClick={() => {
+                      onView("chat");
+                      void openSession(s.id);
+                    }}
+                    onRename={(title) => void act(() => renameSession(s.id, title))}
+                    onDelete={() =>
+                      setConfirm({
+                        title: "Delete session?",
+                        body: `"${s.title}" and its history will be removed from V.I.S.O.R. Your files are not touched.`,
+                        action: "Delete",
+                        run: () => void act(() => deleteSession(s.id)),
+                      })
+                    }
+                  />
+                );
+              })}
+            </WorkspaceGroup>
+          );
+        })}
       </div>
 
       <button type="button" onClick={onWallet} className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]" aria-label="Open credit wallet">
@@ -185,74 +215,171 @@ export function Sidebar({
           </span>
         </span>
       </button>
+      <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </aside>
   );
 }
 
-/**
- * A trash button that asks once more before deleting: the first click turns
- * it into a red "Delete" button for a few seconds, the second click deletes.
- */
-function DeleteButton({ label, confirmLabel = "Delete", onConfirm }: { label: string; confirmLabel?: string; onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false);
+type MenuItem = { label: string; icon: typeof Trash2; danger?: boolean; onSelect: () => void };
+
+/** The "⋯" button and its small menu, shown on hover like Claude's sidebar. */
+function RowMenu({ label, items, forceVisible }: { label: string; items: MenuItem[]; forceVisible?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
   return (
-    <button
-      type="button"
-      aria-label={armed ? `Confirm: ${label}` : label}
-      title={armed ? "Click again to delete" : label}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (armed) {
-          setArmed(false);
-          onConfirm();
-        } else setArmed(true);
-      }}
-      onBlur={() => setArmed(false)}
-      onKeyDown={(e) => e.key === "Escape" && setArmed(false)}
-      className={cn(
-        "shrink-0 rounded-md transition-colors focus-visible:opacity-100",
-        armed
-          ? "bg-rose/15 px-2 py-0.5 text-[11.5px] font-medium text-rose opacity-100"
-          : "p-1 text-white/40 opacity-0 hover:bg-white/[0.08] hover:text-rose group-hover:opacity-100",
-      )}
-    >
-      {armed ? confirmLabel : <Trash2 size={13} />}
-    </button>
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className={cn(
+          "flex size-6 items-center justify-center rounded-md text-white/50 transition-opacity hover:bg-white/[0.1] hover:text-foreground focus-visible:opacity-100",
+          open || forceVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
+        <MoreHorizontal size={15} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="menu"
+            initial={{ opacity: 0, scale: 0.96, y: -2 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            className="absolute right-0 top-7 z-30 min-w-44 origin-top-right rounded-lg border border-white/[0.09] bg-[var(--popover)] p-1 shadow-xl shadow-black/40"
+          >
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  item.onSelect();
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-white/[0.07]",
+                  item.danger ? "text-rose hover:bg-rose/10" : "text-white/85",
+                )}
+              >
+                <item.icon size={14} className="shrink-0 opacity-80" /> {item.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-function Folder2({
+/** "Are you sure?" before deleting anything. */
+function ConfirmDialog({ confirm, onClose }: { confirm: { title: string; body: string; action: string; run: () => void } | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!confirm) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [confirm, onClose]);
+  return (
+    <AnimatePresence>
+      {confirm && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.12 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+          onMouseDown={onClose}
+        >
+          <motion.div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            initial={{ scale: 0.97, y: 4 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.97 }}
+            transition={{ duration: 0.14 }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border border-white/[0.09] bg-[var(--popover)] p-5 shadow-2xl shadow-black/50"
+          >
+            <h2 id="confirm-title" className="text-[15px] font-semibold text-foreground">
+              {confirm.title}
+            </h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-white/60">{confirm.body}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" autoFocus onClick={onClose} className="rounded-lg px-3 py-1.5 text-[13px] text-white/75 hover:bg-white/[0.07]">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  confirm.run();
+                  onClose();
+                }}
+                className="rounded-lg bg-rose px-3 py-1.5 text-[13px] font-medium text-white hover:bg-rose/90"
+              >
+                {confirm.action}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** A workspace folder: a small heading (like Claude's project groups) and its sessions. */
+function WorkspaceGroup({
   name,
   path,
   open,
   onToggle,
-  onDelete,
+  menu,
   children,
 }: {
   name: string;
   path: string;
   open: boolean;
   onToggle: () => void;
-  onDelete?: () => void;
+  menu: MenuItem[];
   children: React.ReactNode;
 }) {
-  const Icon = open ? FolderOpen : Folder;
   return (
-    <div className="mt-1">
-      <div className="group flex items-center rounded-lg pr-2 hover:bg-white/[0.05]">
-        <button type="button" onClick={onToggle} title={path} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left text-white/85" aria-expanded={open}>
-          <Icon size={16} className={cn("shrink-0", open ? "text-indigo/90" : "text-white/55")} />
+    <div className="mt-3 first:mt-1">
+      <div className="group flex items-center rounded-lg pr-1.5">
+        <button
+          type="button"
+          onClick={onToggle}
+          title={path}
+          aria-expanded={open}
+          className="flex min-w-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-[12.5px] text-white/50 outline-none hover:text-white/80 focus-visible:text-white/90"
+        >
           <span className="truncate">{name}</span>
-          <ChevronDown size={13} className={cn("ml-auto shrink-0 text-white/35 transition-transform", !open && "-rotate-90")} />
+          <ChevronDown size={13} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
         </button>
-        {onDelete && <DeleteButton label={`Delete all sessions in ${name}`} confirmLabel="Delete all" onConfirm={onDelete} />}
+        <span className="ml-auto">
+          <RowMenu label={`Options for ${name}`} items={menu} />
+        </span>
       </div>
-      {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
+      {open && <div className="mt-0.5 space-y-px">{children}</div>}
     </div>
   );
 }
@@ -261,30 +388,72 @@ function SessionRow({
   title,
   active,
   dot,
-  meta,
   onClick,
+  onRename,
   onDelete,
 }: {
   title: string;
   active?: boolean;
   dot?: string;
-  meta?: string;
-  onClick?: () => void;
-  onDelete?: () => void;
+  onClick: () => void;
+  onRename: (title: string) => void;
+  onDelete: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const save = () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== title) onRename(next);
+    else setDraft(title);
+  };
   return (
     <div
       className={cn(
-        "group flex items-center rounded-lg pr-2 transition-colors",
-        active ? "bg-white/[0.09] text-foreground" : "text-white/70 hover:bg-white/[0.05] hover:text-foreground",
+        "group flex items-center gap-1 rounded-lg pr-1.5 transition-colors",
+        active ? "bg-white/[0.09] text-foreground" : "text-white/75 hover:bg-white/[0.05] hover:text-foreground",
       )}
     >
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-9 pr-1 text-left">
-        <span className="truncate">{title}</span>
-        {meta && <span className="ml-auto shrink-0 text-[11px] text-white/30 tabular">{meta}</span>}
-        {dot && <i className={cn("size-1.5 shrink-0 rounded-full", !meta && "ml-auto", dot)} />}
-      </button>
-      {onDelete && <DeleteButton label={`Delete session ${title}`} onConfirm={onDelete} />}
+      {editing ? (
+        <input
+          autoFocus
+          aria-label="Session name"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setDraft(title);
+              setEditing(false);
+            }
+          }}
+          className="m-1 min-w-0 flex-1 rounded-md border border-indigo/50 bg-black/30 px-2 py-1 text-[13.5px] text-foreground outline-none"
+        />
+      ) : (
+        <button type="button" onClick={onClick} onDoubleClick={() => setEditing(true)} className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left">
+          <span className="truncate">{title}</span>
+          {dot && <i className={cn("ml-auto size-1.5 shrink-0 rounded-full", dot)} />}
+        </button>
+      )}
+      {!editing && (
+        <RowMenu
+          label={`Options for ${title}`}
+          forceVisible={active}
+          items={[
+            {
+              label: "Rename",
+              icon: Pencil,
+              onSelect: () => {
+                setDraft(title);
+                setEditing(true);
+              },
+            },
+            { label: "Delete", icon: Trash2, danger: true, onSelect: onDelete },
+          ]}
+        />
+      )}
     </div>
   );
 }
