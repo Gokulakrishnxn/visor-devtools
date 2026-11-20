@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, eq, sum } from "drizzle-orm";
 import { monotonicFactory } from "ulid";
 import type { VisorEvent } from "@shared/events";
 import { assertMicro, formatUsd, type MicroUsd } from "@shared/money";
@@ -51,6 +51,12 @@ export class Wallet {
     return this.db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt), desc(creditLedger.id)).limit(limit).all();
   }
 
+  /** What a session has been charged so far (debits and adjustments). */
+  private billed(sessionId: string): MicroUsd {
+    const row = this.db.select({ total: sum(creditLedger.amountMicroUsd) }).from(creditLedger).where(eq(creditLedger.sessionId, sessionId)).get();
+    return -Number(row?.total ?? 0);
+  }
+
   private append(entryType: LedgerRow["entryType"], amount: MicroUsd, note: string, sessionId: string | null = null): LedgerRow {
     assertMicro(amount);
     const row: LedgerRow = {
@@ -87,12 +93,14 @@ export class Wallet {
       p.authoritative += e.costMicroUsd;
       this.pending.set(e.sessionId, p);
     } else if (e.type === "session.ended") {
-      const p = this.pending.get(e.sessionId) ?? { computed: e.totalCostMicroUsd, authoritative: e.totalCostMicroUsd };
+      // totalCostMicroUsd covers every message of the session; earlier ones are already billed
+      const unbilled = Math.max(0, e.totalCostMicroUsd - this.billed(e.sessionId));
+      const p = this.pending.get(e.sessionId) ?? { computed: unbilled, authoritative: unbilled };
       this.pending.delete(e.sessionId);
       const title = sessionTitle ?? "Session";
       // A session that ended before any turn finished still spent what the stream counted
-      const computed = p.computed || e.totalCostMicroUsd;
-      const authoritative = p.authoritative || e.totalCostMicroUsd;
+      const computed = p.computed || unbilled;
+      const authoritative = p.authoritative || unbilled;
       if (computed > 0) this.append("debit", -computed, title, e.sessionId);
       const diff = authoritative - computed;
       if (diff !== 0) this.append("adjustment", -diff, `Reconciled with SDK total_cost_usd (${diff > 0 ? "+" : ""}${formatUsd(diff, 6)})`, e.sessionId);

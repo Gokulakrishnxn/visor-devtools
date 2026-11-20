@@ -76,7 +76,6 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   runner.subscribe((e) => {
     if (e.type === "session.started") titles.set(e.sessionId, e.title);
     wallet.onEvent(e, titles.get(e.sessionId));
-    if (e.type === "session.ended") titles.delete(e.sessionId);
   });
 
   const app = createApp({

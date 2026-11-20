@@ -176,7 +176,10 @@ export const useSession = create<SessionState>((set, get) => ({
 
   async start(opts = {}) {
     try {
-      const { sessionId } = await api<{ sessionId: string }>(get().token, "/api/sessions", {
+      // With a session open, the message continues it; otherwise it starts a new one
+      const current = get().sessionId;
+      const path = current ? `/api/sessions/${current}/messages` : "/api/sessions";
+      const { sessionId } = await api<{ sessionId: string }>(get().token, path, {
         method: "POST",
         body: JSON.stringify({ prompt: opts.prompt ?? "", capUsd: opts.capUsd || "5", modelId: opts.modelId, effort: opts.effort }),
       });

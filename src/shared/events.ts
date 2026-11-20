@@ -132,6 +132,8 @@ export const VisorEvent = z.discriminatedUnion("type", [
     contextUsedTokens: tokens,
     contextLimitTokens: tokens,
     contextBreakdown: Breakdown,
+    /** The runtime's own session id (Claude Agent SDK), used to resume on a follow-up message. */
+    runtimeSessionId: z.string().optional(),
     at,
   }),
   z.object({

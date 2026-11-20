@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { ulid } from "ulid";
 import type { VisorEvent } from "@shared/events";
 import { UsageLedger } from "../telemetry/cost";
@@ -32,10 +32,16 @@ export class TraceRecorder {
   record(e: VisorEvent): void {
     this.project(e);
     // session.started inserts the session row the event log references
-    const n = this.seq.get(e.sessionId) ?? 0;
+    // A follow-up message continues the log after what is already stored
+    const n = this.seq.get(e.sessionId) ?? this.nextSeq(e.sessionId);
     this.seq.set(e.sessionId, n + 1);
     this.db.insert(sessionEvents).values({ sessionId: e.sessionId, seq: n, type: e.type, eventJson: JSON.stringify(e), at: e.at }).run();
     if (e.type === "session.ended") this.seq.delete(e.sessionId);
+  }
+
+  private nextSeq(sessionId: string): number {
+    const row = this.db.select({ last: max(sessionEvents.seq) }).from(sessionEvents).where(eq(sessionEvents.sessionId, sessionId)).get();
+    return row?.last == null ? 0 : row.last + 1;
   }
 
   private project(e: VisorEvent): void {
@@ -55,6 +61,8 @@ export class TraceRecorder {
           .run();
         break;
       case "turn.started":
+        // A follow-up reopens a finished session
+        if (e.turnIndex > 0) this.db.update(sessions).set({ status: "running", endedAt: null }).where(eq(sessions.id, e.sessionId)).run();
         this.db
           .insert(turns)
           .values({ id: e.turnId, sessionId: e.sessionId, turnIndex: e.turnIndex, userPrompt: e.prompt, startedAt: e.at })

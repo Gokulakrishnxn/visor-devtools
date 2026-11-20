@@ -66,6 +66,16 @@ describe("prepaid credit wallet", () => {
     expect(wallet.balance()).toBe(5_000_000 - 20_300); // authoritative total in the end
   });
 
+  it("bills only the new part of a session that continues with a follow-up", () => {
+    const { db, wallet } = setup();
+    wallet.deposit(5_000_000);
+    liveSession(db, wallet, "chat", [{ cost: 20_000 }], 20_000);
+    // The follow-up failed before any turn ended; its session total includes the first message
+    wallet.onEvent({ type: "session.ended", sessionId: "chat", status: "error", totalCostMicroUsd: 26_000, at: 9 }, "chat");
+    expect(wallet.entries()[0]).toMatchObject({ entryType: "debit", amountMicroUsd: -6_000, sessionId: "chat" });
+    expect(wallet.balance()).toBe(5_000_000 - 26_000);
+  });
+
   it("never debits mock sessions", () => {
     const { db, wallet } = setup(false);
     wallet.deposit(1_000_000);

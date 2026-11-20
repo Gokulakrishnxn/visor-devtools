@@ -179,6 +179,52 @@ describe("persistence and config for Phase 3", () => {
     expect(await (await app.request("/api/info", { headers: auth })).json()).toMatchObject({ runtime: "claude", workspacePath: "/w/acme" });
   });
 
+  it("continues a session with a follow-up message, even after a restart", async () => {
+    const db = openDatabase(":memory:");
+    const record = new TraceRecorder(db);
+    const approveAll = (runner: SessionRunner) =>
+      runner.subscribe((e) => {
+        record.record(e);
+        if (e.type === "breakpoint.paused") queueMicrotask(() => runner.resolveBreakpoint(e.spanId, { decision: "approved" }));
+      });
+    const first: Captured = { hookReplies: [] };
+    const before = new SessionRunner({ adapter: new ClaudeSdkAdapter({ query: fakeQuery(first) }), validate: true });
+    approveAll(before);
+    await before.run({ sessionId: "chat", prompt: "Build the page", workspacePath: "/w", modelId: "claude-opus-5-5", effort: "medium", budgetCapMicroUsd: null });
+    expect(first.options?.resume).toBeUndefined();
+
+    // A new daemon (empty memory) gets the follow-up
+    const second: Captured = { hookReplies: [] };
+    const after = new SessionRunner({ adapter: new ClaudeSdkAdapter({ query: fakeQuery(second) }), validate: true });
+    approveAll(after);
+    const store = new TraceStore(db);
+    const app = createApp({ runner: after, token: "t", workspacePath: "/w", store });
+    const res = await app.request("/api/sessions/chat/messages", {
+      method: "POST",
+      headers: { authorization: "Bearer t", "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "Now add a photo" }),
+    });
+    expect(res.status).toBe(202);
+    await expect.poll(() => after.isRunning("chat")).toBe(false);
+
+    // Claude resumes its own conversation, and the log continues in the same session
+    expect(second.options?.resume).toBe("sdk");
+    const events = store.events("chat");
+    expect(events.filter((e) => e.type === "session.started")).toHaveLength(1);
+    expect(of(events, "turn.started").map((t) => [t.turnIndex, t.prompt])).toEqual([
+      [0, "Build the page"],
+      [1, "Now add a photo"],
+    ]);
+    expect(of(events, "session.ended").map((e) => e.totalCostMicroUsd)).toEqual([12_300, 24_600]);
+    expect(store.listSessions()).toHaveLength(1);
+    expect(store.listSessions()[0]).toMatchObject({ id: "chat", status: "completed", totalCostMicroUsd: 24_600 });
+    // The GUI's replay has both messages
+    const replay = (await (await app.request("/api/sessions/chat/events", { headers: { authorization: "Bearer t" } })).json()) as { events: VisorEvent[] };
+    expect(of(replay.events, "turn.started")).toHaveLength(2);
+
+    expect((await app.request("/api/sessions/nope/messages", { method: "POST", headers: { authorization: "Bearer t" }, body: JSON.stringify({ prompt: "x" }) })).status).toBe(404);
+  });
+
   it("keeps live runs opt-in", () => {
     expect(resolveRuntime(undefined, undefined)).toBe("mock");
     expect(resolveRuntime(undefined, "claude")).toBe("claude");

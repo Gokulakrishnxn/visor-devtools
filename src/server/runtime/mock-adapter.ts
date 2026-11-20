@@ -60,7 +60,8 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
     const wait = (ms: number) => sleep(ms * this.speed, hooks.signal);
     let context: ContextBreakdown = { ...emptyBreakdown(), ...sc.contextBase };
 
-    yield {
+    const followUp = options.followUp;
+    if (!followUp) yield {
       type: "session.started",
       sessionId,
       title: options.title ?? (options.prompt ? options.prompt.slice(0, 60) : sc.title),
@@ -175,7 +176,7 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
       ledger = new UsageLedger();
       turnId = this.newId();
       const prompt = turnIndex === 0 && options.prompt ? options.prompt : turn.prompt;
-      yield { type: "turn.started", sessionId, turnId, turnIndex, prompt, at: this.now() };
+      yield { type: "turn.started", sessionId, turnId, turnIndex: turnIndex + (followUp?.turnIndex ?? 0), prompt, at: this.now() };
       context = { ...context, messages: context.messages + Math.ceil(prompt.length / 4) };
 
       for (const step of turn.steps) {

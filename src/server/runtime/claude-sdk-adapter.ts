@@ -210,7 +210,10 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
     // Real thinking-token counts from the SDK replace our estimate when present
     let thinkingFromSdk = false;
 
-    emit({
+    const followUp = options.followUp;
+    const turnIndex = followUp?.turnIndex ?? 0;
+    let runtimeSessionId: string | undefined = followUp?.resumeId;
+    if (!followUp) emit({
       type: "session.started",
       sessionId,
       title: options.title ?? (options.prompt.slice(0, 60) || "New session"),
@@ -220,7 +223,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
       budgetCapMicroUsd: options.budgetCapMicroUsd,
       at: this.now(),
     });
-    emit({ type: "turn.started", sessionId, turnId, turnIndex: 0, prompt: options.prompt, at: this.now() });
+    emit({ type: "turn.started", sessionId, turnId, turnIndex, prompt: options.prompt, at: this.now() });
     context.messages += Math.ceil(options.prompt.length / 4);
 
     const openLlm = (messageId: string, parentToolUseId: string | null, usage?: TokenUsage): Llm => {
@@ -427,6 +430,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
             contextUsedTokens: Object.values(breakdown).reduce((a, b) => a + b, 0),
             contextLimitTokens: limit,
             contextBreakdown: breakdown,
+            ...(runtimeSessionId ? { runtimeSessionId } : {}),
             at: this.now(),
           });
           const status = m.subtype === "success" ? "completed" : m.subtype === "error_max_budget_usd" ? "aborted_budget" : hooks.signal.aborted ? "aborted_budget" : "error";
@@ -454,6 +458,8 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
       hooks: { PreToolUse: [{ hooks: [preToolUse], onFailure: "block" }] },
       ...(options.budgetCapMicroUsd !== null ? { maxBudgetUsd: options.budgetCapMicroUsd / 1_000_000 } : {}),
       ...(this.opts.mcpServers ? { mcpServers: this.opts.mcpServers } : {}),
+      // A follow-up resumes the same Claude conversation
+      ...(followUp?.resumeId ? { resume: followUp.resumeId } : {}),
     };
 
     const pump = (async () => {
@@ -462,6 +468,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
           getContextUsage?: (opts?: { detail?: "summary" | "full" }) => Promise<SdkContextUsage>;
         };
         for await (const m of q) {
+          if (typeof (m as { session_id?: unknown }).session_id === "string") runtimeSessionId = (m as { session_id: string }).session_id;
           let report: SdkContextUsage | undefined;
           // At the end of the turn, ask the SDK for the real context breakdown (best effort)
           if (m.type === "result" && typeof q.getContextUsage === "function") {
