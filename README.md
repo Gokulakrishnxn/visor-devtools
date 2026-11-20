@@ -93,6 +93,18 @@ Put it in the workspace root (see [`.visor.example.json`](.visor.example.json)):
 }
 ```
 
+### Optional: shrink big shell output with Straitjacket
+
+If [Straitjacket](https://github.com/vamsiramakrishnan/straitjacket)'s `ctx` command is installed (`pip install ctx-harness`, Python 3.11+), live runs pass any shell result over 20,000 characters through `ctx intake`. Claude sees a short digest with `run:` addresses it can search or page through, instead of the whole log on every later turn. Each condensed step shows the tokens kept out and a **Full output** viewer, and the Cost tab totals the saving.
+
+It helps most with long test runs, builds and logs; for small outputs nothing changes. Tune or turn it off in `.visor.json`:
+
+```json
+{ "straitjacket": { "enabled": "auto", "minChars": 20000, "command": "ctx" } }
+```
+
+`vhud doctor` says whether it's installed. V.I.S.O.R. only runs the `ctx` command; it doesn't include Straitjacket's code.
+
 ![Inspector cost receipt and per-agent totals](docs/screenshots/inspector.png)
 
 ## Architecture
@@ -161,5 +173,6 @@ Copyright (c) 2026 Gokulakrishnan. You can use, copy, modify and distribute this
 | [Stageshow](https://github.com/benjitaylor/skills) kit (`site/src/kit`) | Animated product demos on the landing page | MIT |
 | [Rail TOC](https://github.com/swamimalode07/rare-ui) (`site/src/components/ui/rail-toc.tsx`) | Docs "On this page" sidebar | See upstream repository |
 | [Simple Icons](https://simpleicons.org) | GitHub, Claude and Gemini marks | CC0 (brand marks remain trademarks of their owners) |
+| [Straitjacket](https://github.com/vamsiramakrishnan/straitjacket) (`ctx`, optional, installed separately) | Condensing big shell output | Apache-2.0 (not bundled; run as a separate program) |
 
 Claude is a trademark of Anthropic. Gemini is a trademark of Google. V.I.S.O.R. is an independent project and is not affiliated with or endorsed by either company.

@@ -58,7 +58,13 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const runtime = opts.runtime ?? resolveRuntime();
   const adapter =
     runtime === "claude"
-      ? new ClaudeSdkAdapter({ pricing, mcpServers: config.mcpServers as never, skills: config.skills })
+      ? new ClaudeSdkAdapter({
+          pricing,
+          mcpServers: config.mcpServers as never,
+          skills: config.skills,
+          // Off only when .visor.json says so; otherwise used whenever `ctx` is installed
+          straitjacket: config.straitjacket.enabled === false ? null : { command: config.straitjacket.command, minChars: config.straitjacket.minChars },
+        })
       : new MockRuntimeAdapter({ speed: opts.mockSpeed ?? 1, pricing });
   const runner = new SessionRunner({
     adapter,
@@ -90,7 +96,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     wallet,
     maxCapMicroUsd: opts.capMicroUsd ?? config.budget.sessionCapUsd ?? null,
     chatsRoot: join(dirname(opts.dbPath ?? DEFAULT_DB_PATH), "chats"),
-    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, rules: config.breakpoints.length, triggers: config.triggers.length },
+    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, straitjacket: config.straitjacket.enabled === false ? null : config.straitjacket, rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 

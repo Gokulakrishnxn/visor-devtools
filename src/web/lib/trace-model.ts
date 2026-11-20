@@ -26,6 +26,8 @@ export type TraceSpan = {
   depth: number;
   children: string[];
   breakpoint?: { toolName: string; rule: string; decision?: Decision; note?: string; finalInput?: unknown };
+  /** Straitjacket stored this step's big output; Claude saw a digest instead. */
+  condensed?: { handle: string | null; originalTokens: number; digestTokens: number; originalChars: number };
 };
 
 export type TraceTurn = {
@@ -83,6 +85,8 @@ export type TraceModel = {
   firstAt: number;
   lastAt: number;
   agents: AgentStat[];
+  /** Straitjacket: tokens kept out of Claude's context (estimate) and how many outputs it condensed. */
+  condensed: { outputs: number; tokensSaved: number };
 };
 
 const ZERO_COST: CostBreakdown = { input: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, output: 0, total: 0, cacheSavings: 0 };
@@ -101,6 +105,7 @@ export const EMPTY_MODEL: TraceModel = {
   alerts: [],
   contextHistory: [],
   contextDetail: null,
+  condensed: { outputs: 0, tokensSaved: 0 },
   firstAt: 0,
   lastAt: 0,
   agents: [],
@@ -119,7 +124,7 @@ function addCost(a: CostBreakdown, b: CostBreakdown): CostBreakdown {
 }
 
 export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
-  const m: TraceModel = { ...EMPTY_MODEL, turns: [], spans: {}, order: [], alerts: [], contextHistory: [], agents: [] };
+  const m: TraceModel = { ...EMPTY_MODEL, turns: [], spans: {}, order: [], alerts: [], contextHistory: [], agents: [], condensed: { outputs: 0, tokensSaved: 0 } };
   // Prompt + output tokens per model-call span, for per-agent totals
   const tokensBySpan = new Map<string, number>();
   const seen = new Set<string>();
@@ -174,6 +179,12 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
       case "span.delta": {
         const s = m.spans[e.spanId];
         if (s) m.spans[e.spanId] = { ...s, text: s.text + e.text };
+        break;
+      }
+      case "output.condensed": {
+        const s = m.spans[e.spanId];
+        if (s) m.spans[e.spanId] = { ...s, condensed: { handle: e.handle, originalTokens: e.originalTokens, digestTokens: e.digestTokens, originalChars: e.originalChars } };
+        m.condensed = { outputs: m.condensed.outputs + 1, tokensSaved: m.condensed.tokensSaved + Math.max(0, e.originalTokens - e.digestTokens) };
         break;
       }
       case "span.ended": {

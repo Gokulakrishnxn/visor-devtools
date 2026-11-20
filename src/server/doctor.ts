@@ -53,6 +53,11 @@ export function doctor(dbPath = DEFAULT_DB_PATH, log: (line: string) => void = c
     else if (url) line(/^https?:\/\//.test(url), `MCP ${name}: remote server ${url}`);
     else line(false, `MCP ${name}: needs a "command" or "url"`);
   }
+  // Optional: Straitjacket condenses big shell output (never fails the check)
+  const sj = config.straitjacket;
+  if (sj.enabled === false) log("– Straitjacket: turned off in .visor.json");
+  else if (commandExists(sj.command)) log(`✓ Straitjacket: \`${sj.command}\` found, shell output over ${sj.minChars.toLocaleString("en-US")} characters is condensed`);
+  else log(`– Straitjacket: optional, not installed (\`pip install ctx-harness\` to shrink big shell output)`);
   return ok;
 }
 
