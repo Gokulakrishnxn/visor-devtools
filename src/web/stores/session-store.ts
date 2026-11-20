@@ -35,6 +35,9 @@ type SessionState = {
   exportLedger: () => Promise<void>;
   connect: () => void;
   refreshSessions: () => Promise<void>;
+  /** Delete sessions from V.I.S.O.R. (one, or a whole workspace by path). Returns an error message or null. */
+  deleteSession: (sessionId: string) => Promise<string | null>;
+  deleteWorkspace: (workspacePath: string) => Promise<string | null>;
   /** Open a stored session: its events load from SQLite and replay instantly. */
   open: (sessionId: string) => Promise<void>;
   start: (opts?: { prompt?: string; capUsd?: string; modelId?: string; effort?: "low" | "medium" | "high" }) => Promise<void>;
@@ -63,6 +66,27 @@ async function api<T>(token: string, path: string, init?: RequestInit): Promise<
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return (await res.json()) as T;
+}
+
+type Get = () => SessionState;
+type Set = (partial: Partial<SessionState>) => void;
+
+async function removeSessions(get: Get, set: Set, path: string, match: (s: StoredSession) => boolean): Promise<string | null> {
+  try {
+    await api(get().token, path, { method: "DELETE" });
+  } catch (err) {
+    const text = (err as Error).message.replace(/^\d+ /, "");
+    try {
+      return (JSON.parse(text) as { error?: string }).error ?? text;
+    } catch {
+      return text;
+    }
+  }
+  const gone = new Set(get().sessions.filter(match).map((s) => s.id));
+  const bySession = Object.fromEntries(Object.entries(get().bySession).filter(([id]) => !gone.has(id)));
+  const current = get().sessionId;
+  set({ sessions: get().sessions.filter((s) => !gone.has(s.id)), bySession, ...(current && gone.has(current) ? { sessionId: null, cursor: null, selectedSpanId: null } : {}) });
+  return null;
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -163,6 +187,14 @@ export const useSession = create<SessionState>((set, get) => ({
     } catch {
       // the list is a convenience; the live stream keeps working without it
     }
+  },
+
+  async deleteSession(sessionId) {
+    return removeSessions(get, set, `/api/sessions/${encodeURIComponent(sessionId)}`, (s) => s.id === sessionId);
+  },
+
+  async deleteWorkspace(workspacePath) {
+    return removeSessions(get, set, `/api/workspaces?path=${encodeURIComponent(workspacePath)}`, (s) => s.workspacePath === workspacePath);
   },
 
   async open(sessionId) {

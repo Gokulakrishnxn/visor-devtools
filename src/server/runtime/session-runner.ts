@@ -82,6 +82,11 @@ export class SessionRunner {
     return this.history.get(sessionId) ?? [];
   }
 
+  /** Drops a finished session's in-memory events (after it is deleted). */
+  forget(sessionId: string): void {
+    if (!this.controllers.has(sessionId)) this.history.delete(sessionId);
+  }
+
   isRunning(sessionId: string): boolean {
     return this.controllers.has(sessionId);
   }

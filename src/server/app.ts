@@ -120,6 +120,26 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     return c.json({ sessionId: id, capMicroUsd: cap, limitedByCredit }, 202);
   });
 
+  // Delete a session's history (never touches files on disk)
+  api.delete("/sessions/:id", (c) => {
+    const id = c.req.param("id");
+    if (runner.isRunning(id)) return c.json({ error: "Stop this session before deleting it." }, 409);
+    const deleted = store?.deleteSessions([id]) ?? 0;
+    runner.forget(id);
+    return deleted ? c.json({ deleted }) : c.json({ error: "Session not found" }, 404);
+  });
+
+  // Delete every session of a workspace folder from V.I.S.O.R. (the folder itself is left alone)
+  api.delete("/workspaces", (c) => {
+    const path = c.req.query("path");
+    if (!path) return c.json({ error: "path is required" }, 400);
+    const ids = store?.sessionIdsIn(path) ?? [];
+    if (ids.some((id) => runner.isRunning(id))) return c.json({ error: "A session in this workspace is still running. Stop it first." }, 409);
+    const deleted = store?.deleteSessions(ids) ?? 0;
+    ids.forEach((id) => runner.forget(id));
+    return c.json({ deleted });
+  });
+
   api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, ...info }));
 
   api.get("/sessions", (c) => c.json({ sessions: store?.listSessions() ?? [] }));

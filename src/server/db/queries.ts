@@ -1,4 +1,4 @@
-import { asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { VisorEvent } from "@shared/events";
 import type { VisorDb } from "./client";
 import { policyAuditLog, sessionEvents, sessions, spans, turns } from "./schema";
@@ -47,6 +47,20 @@ export function snippetAround(text: string, query: string, width = 90): string {
 /** Read side of the trace store: the sidebar list and offline replay. */
 export class TraceStore {
   constructor(private readonly db: VisorDb) {}
+
+  /**
+   * Deletes sessions and everything recorded for them (turns, spans, events,
+   * audit rows cascade). Wallet history stays, unlinked. Returns how many.
+   */
+  deleteSessions(ids: string[]): number {
+    if (!ids.length) return 0;
+    return this.db.delete(sessions).where(inArray(sessions.id, ids)).run().changes;
+  }
+
+  /** IDs of every session recorded in a workspace folder. */
+  sessionIdsIn(workspacePath: string): string[] {
+    return this.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.workspacePath, workspacePath)).all().map((r) => r.id);
+  }
 
   listSessions(limit = 50): SessionSummary[] {
     return this.db
