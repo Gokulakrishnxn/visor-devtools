@@ -5,6 +5,7 @@ import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 import { isChatFolder, NO_FOLDER, useSession, type StoredSession } from "@/stores/session-store";
+import { GitBar } from "./git-bar";
 
 const folderOf = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
@@ -194,6 +195,7 @@ export function Sidebar({
         )}
       </div>
 
+      <GitBar />
       <button
         type="button"
         onClick={onWallet}

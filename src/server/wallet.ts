@@ -51,6 +51,12 @@ export class Wallet {
     return this.db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt), desc(creditLedger.id)).limit(limit).all();
   }
 
+  /** Charges a live, non-session use of Claude (e.g. writing a commit message). Mock runs are never charged. */
+  chargeExtra(amount: MicroUsd, note: string): LedgerRow | null {
+    if (!this.debitSessions || amount <= 0) return null;
+    return this.append("debit", -amount, note);
+  }
+
   /** What a session has been charged so far (debits and adjustments). */
   private billed(sessionId: string): MicroUsd {
     const row = this.db.select({ total: sum(creditLedger.amountMicroUsd) }).from(creditLedger).where(eq(creditLedger.sessionId, sessionId)).get();

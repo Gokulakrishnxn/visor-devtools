@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const components: Components = {
   p: ({ children }) => <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => (
-    <a href={href} target="_blank" rel="noreferrer noopener" className="text-indigo underline decoration-indigo/40 underline-offset-2 hover:decoration-indigo">
+    <a href={href} target="_blank" rel="noreferrer noopener" title={href} className="text-inherit no-underline hover:text-foreground">
       {href && <SiteIcon href={href} size={14} className="mr-1.5 -mt-0.5 align-middle" />}
       {children}
     </a>
