@@ -5,7 +5,11 @@ import { deriveTrace, type TraceModel } from "@/lib/trace-model";
 
 type Connection = "idle" | "connecting" | "open" | "closed";
 
-export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number; maxCapMicroUsd?: number | null };
+export type DaemonInfo = { runtime: "mock" | "claude"; workspacePath: string; defaultModel: string; configPath: string | null; configError: string | null; mcpServers: string[]; rules: number; maxCapMicroUsd?: number | null; chatsRoot?: string | null };
+/** The folder choice meaning "No folder": a private, empty scratch folder per chat. */
+export const NO_FOLDER = ":no-folder";
+/** True for a session folder that is a no-folder chat's scratch folder. */
+export const isChatFolder = (path: string, info: DaemonInfo | null) => Boolean(info?.chatsRoot && (path === info.chatsRoot || path.startsWith(`${info.chatsRoot}/`)));
 export type ClaudeProfile = { name: string | null; plan: string | null };
 export type LedgerEntry = { id: string; sessionId: string | null; entryType: "deposit" | "debit" | "adjustment"; amountMicroUsd: number; balanceAfterMicroUsd: number; note: string | null; createdAt: number };
 export type WalletState = { enabled: boolean; active: boolean; balanceMicroUsd: number; entries: LedgerEntry[] };
@@ -350,7 +354,7 @@ export const useSession = create<SessionState>((set, get) => ({
           modelId: opts.modelId,
           effort: opts.effort,
           // A new session runs in the folder you picked; a follow-up stays in its own folder
-          ...(!current && get().folder ? { workspacePath: get().folder } : {}),
+          ...(!current && get().folder === NO_FOLDER ? { noFolder: true } : !current && get().folder ? { workspacePath: get().folder } : {}),
         }),
       });
       set({ sessionId, cursor: null, selectedSpanId: null, error: null });

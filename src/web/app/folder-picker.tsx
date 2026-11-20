@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Check, ChevronDown, ChevronRight, Folder, FolderOpen, Home } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, Folder, FolderOpen, Home, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSession } from "@/stores/session-store";
+import { isChatFolder, NO_FOLDER, useSession } from "@/stores/session-store";
 
 type Listing = { path: string; parent: string | null; home: string; folders: { name: string; path: string }[] };
 
@@ -26,8 +26,10 @@ export function FolderButton({ disabled }: { disabled?: boolean }) {
 
   // An open session shows its own folder; a new one uses the folder you picked
   const open = sessions.find((s) => s.id === sessionId);
-  const current = open?.workspacePath ?? chosen ?? info?.workspacePath ?? null;
-  const recents = [...new Set([chosen, info?.workspacePath, ...sessions.map((s) => s.workspacePath)].filter((p): p is string => Boolean(p)))].slice(0, 6);
+  const openPath = open ? (isChatFolder(open.workspacePath, info) ? NO_FOLDER : open.workspacePath) : null;
+  const current = openPath ?? chosen ?? info?.workspacePath ?? null;
+  const noFolder = current === NO_FOLDER;
+  const recents = [...new Set([chosen, info?.workspacePath, ...sessions.map((s) => s.workspacePath)].filter((p): p is string => Boolean(p) && p !== NO_FOLDER && !isChatFolder(p!, info)))].slice(0, 6);
 
   useEffect(() => {
     if (!menu) return;
@@ -53,8 +55,8 @@ export function FolderButton({ disabled }: { disabled?: boolean }) {
         title={current ?? undefined}
         className="flex h-8 max-w-[200px] items-center gap-1.5 rounded-full px-2.5 text-[13px] text-white/70 hover:bg-white/[0.06] disabled:opacity-50"
       >
-        <Folder size={14} className="shrink-0" />
-        <span className="truncate">{current ? nameOf(current) : "Open folder"}</span>
+        {noFolder ? <MessageSquare size={14} className="shrink-0" /> : <Folder size={14} className="shrink-0" />}
+        <span className="truncate">{noFolder ? "No folder" : current ? nameOf(current) : "Open folder"}</span>
         <ChevronDown size={13} className="shrink-0 text-white/40" />
       </button>
       <AnimatePresence>
@@ -78,13 +80,23 @@ export function FolderButton({ disabled }: { disabled?: boolean }) {
               </button>
             ))}
             <div className="my-1 border-t border-white/[0.07]" />
+            {info?.chatsRoot && (
+              <button type="button" onClick={() => pick(NO_FOLDER)} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-white/[0.07]">
+                <MessageSquare size={14} className="shrink-0 text-white/50" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] text-foreground/90">No folder</span>
+                  <span className="block truncate text-[11px] text-white/35">Just chat; Claude gets an empty scratch folder</span>
+                </span>
+                {noFolder && <Check size={14} className="shrink-0 text-indigo" />}
+              </button>
+            )}
             <button type="button" onClick={() => (setMenu(false), setBrowse(true))} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] text-white/85 hover:bg-white/[0.07]">
               <FolderOpen size={14} className="text-white/50" /> Open folder…
             </button>
           </motion.div>
         )}
       </AnimatePresence>
-      {browse && <FolderBrowser start={current} onPick={pick} onClose={() => setBrowse(false)} />}
+      {browse && <FolderBrowser start={noFolder ? null : current} onPick={pick} onClose={() => setBrowse(false)} />}
     </div>
   );
 }
