@@ -4,8 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { parseUsd } from "@shared/money";
+import { DEFAULT_DB_PATH } from "./server/db/client";
 import { doctor } from "./server/doctor";
 import { DEFAULT_PORT, startDaemon } from "./server/server";
+import { savedToken } from "./server/token";
 
 const VERSION = "0.1.0";
 
@@ -56,7 +58,10 @@ async function main() {
   const cap = values.cap ? parseUsd(values.cap) : null;
   const here = dirname(fileURLToPath(import.meta.url));
   const staticDir = [join(here, "web"), join(here, "../dist/web")].find((d) => existsSync(join(d, "index.html")));
-  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir, runtime: values.live ? "claude" : undefined, capMicroUsd: cap });
+  const daemon = startDaemon({ port: values.port ? Number(values.port) : undefined, staticDir, runtime: values.live ? "claude" : undefined, capMicroUsd: cap,
+    // Same token every launch, so the link and a remembered browser keep working
+    token: process.env.VISOR_TOKEN || savedToken(dirname(DEFAULT_DB_PATH)),
+  });
   const url = `${daemon.url}/?token=${daemon.token}`;
 
   console.log(`\n  V.I.S.O.R. ${VERSION} running at ${daemon.url}`);

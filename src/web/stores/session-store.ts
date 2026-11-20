@@ -58,16 +58,45 @@ type SessionState = {
   setCursor: (n: number | null) => void;
 };
 
+const TOKEN_KEY = "visor-token";
+export function forgetToken() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // nothing stored
+  }
+}
+/** Saves a token (or a whole link with ?token=) pasted by hand, then reloads. Returns false when it has none. */
+export function saveTokenFrom(input: string): boolean {
+  const text = input.trim();
+  let token = text;
+  try {
+    token = new URL(text).searchParams.get("token") ?? "";
+  } catch {
+    // not a link: treat it as the token itself
+  }
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(token)) return false;
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    window.location.search = `?token=${encodeURIComponent(token)}`;
+    return true;
+  }
+  window.location.reload();
+  return true;
+}
 const readToken = () => {
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get("token");
   let saved = false;
   try {
-    if (fromUrl) sessionStorage.setItem("visor-token", fromUrl);
+    // Remembered for this address in this browser (every tab), not shared with any other site
+    if (fromUrl) localStorage.setItem(TOKEN_KEY, fromUrl);
     saved = Boolean(fromUrl);
-    if (!fromUrl) return sessionStorage.getItem("visor-token") ?? "";
+    if (!fromUrl) return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY) ?? "";
   } catch {
-    // no session storage: keep the token in the address so a reload still works
+    // no storage (private window): keep the token in the address so a reload still works
   }
   // Clean address bar: the secret token stays in this tab only, not in the URL or history
   if (saved) {
@@ -142,29 +171,40 @@ export const useSession = create<SessionState>((set, get) => ({
     const { token, connection } = get();
     if (!token || connection === "open" || connection === "connecting") return;
     set({ connection: "connecting" });
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-    ws.onopen = () => {
-      set({ connection: "open", error: null });
-      void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
-      void api<ClaudeProfile>(get().token, "/api/profile").then((profile) => set({ profile })).catch(() => undefined);
-      void get().refreshSessions();
-      void get().refreshWallet();
-      void api<{ toggles: PauseToggles }>(get().token, "/api/policy").then((p) => set({ toggles: p.toggles })).catch(() => undefined);
+    const openSocket = () => {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+      ws.onopen = () => {
+        set({ connection: "open", error: null });
+        void api<DaemonInfo>(get().token, "/api/info").then((info) => set({ info })).catch(() => undefined);
+        void api<ClaudeProfile>(get().token, "/api/profile").then((profile) => set({ profile })).catch(() => undefined);
+        void get().refreshSessions();
+        void get().refreshWallet();
+        void api<{ toggles: PauseToggles }>(get().token, "/api/policy").then((p) => set({ toggles: p.toggles })).catch(() => undefined);
+      };
+      ws.onclose = () => {
+        set({ connection: "closed" });
+        setTimeout(() => get().connect(), 1500);
+      };
+      ws.onmessage = (msg) => {
+        const parsed = VisorEvent.safeParse(JSON.parse(String(msg.data)));
+        if (!parsed.success) return;
+        const e = parsed.data;
+        set((s) => ({ bySession: { ...s.bySession, [e.sessionId]: [...(s.bySession[e.sessionId] ?? []), e] } }));
+        if (e.type === "session.started" || e.type === "session.ended") void get().refreshSessions();
+        if (e.type === "session.ended") setTimeout(() => void get().refreshWallet(), 150);
+        if (e.type === "breakpoint.resolved") setTimeout(() => void get().refreshAudit(), 150);
+      };
     };
-    ws.onclose = () => {
-      set({ connection: "closed" });
-      setTimeout(() => get().connect(), 1500);
-    };
-    ws.onmessage = (msg) => {
-      const parsed = VisorEvent.safeParse(JSON.parse(String(msg.data)));
-      if (!parsed.success) return;
-      const e = parsed.data;
-      set((s) => ({ bySession: { ...s.bySession, [e.sessionId]: [...(s.bySession[e.sessionId] ?? []), e] } }));
-      if (e.type === "session.started" || e.type === "session.ended") void get().refreshSessions();
-      if (e.type === "session.ended") setTimeout(() => void get().refreshWallet(), 150);
-      if (e.type === "breakpoint.resolved") setTimeout(() => void get().refreshAudit(), 150);
-    };
+    // A remembered token from an older V.I.S.O.R. is refused: forget it and ask for the link
+    void fetch("/api/info", { headers: { authorization: `Bearer ${token}` } })
+      .then((res) => {
+        if (res.status === 401) {
+          forgetToken();
+          set({ token: "", connection: "closed" });
+        } else openSocket();
+      })
+      .catch(() => openSocket());
   },
 
   async setToggles(next) {

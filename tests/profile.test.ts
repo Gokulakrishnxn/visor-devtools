@@ -39,3 +39,18 @@ describe("Claude profile in the sidebar", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("saved access token", async () => {
+  const { savedToken } = await import("@server/token");
+  const { statSync } = await import("node:fs");
+  it("creates one private token and reuses it on every launch", () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "visor-tok-")), ".visor");
+    const first = savedToken(dir);
+    expect(first).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(savedToken(dir)).toBe(first);
+    expect(statSync(join(dir, "token")).mode & 0o777).toBe(0o600);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    writeFileSync(join(dir, "token"), "short");
+    expect(savedToken(dir)).not.toBe("short"); // a broken file is replaced
+  });
+});
