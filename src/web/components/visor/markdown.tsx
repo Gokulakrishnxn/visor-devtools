@@ -1,6 +1,7 @@
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SiteIcon } from "@/components/visor/site-icon";
 import { cn } from "@/lib/utils";
 
 // Claude's replies are Markdown. Raw HTML in them is never rendered (react-markdown's default).
@@ -8,6 +9,7 @@ const components: Components = {
   p: ({ children }) => <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => (
     <a href={href} target="_blank" rel="noreferrer noopener" className="text-indigo underline decoration-indigo/40 underline-offset-2 hover:decoration-indigo">
+      {href && <SiteIcon href={href} size={14} className="mr-1.5 -mt-0.5 align-middle" />}
       {children}
     </a>
   ),

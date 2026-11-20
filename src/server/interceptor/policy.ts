@@ -1,4 +1,3 @@
-import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 
 /**
@@ -33,21 +32,8 @@ export const PauseToggles = z.object({
 export type PauseToggles = z.infer<typeof PauseToggles>;
 export const NO_PAUSES: PauseToggles = { bash: false, edits: false, mcpWrites: false };
 
-const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+export const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const SHELL_TOOLS = new Set(["Bash", "BashOutput"]);
-
-/**
- * The file an edit tool would write, when it lies outside the workspace
- * (resolved against it; `..` escapes count). null when inside or not an edit.
- */
-export function editOutsideWorkspace(toolName: string, input: Record<string, unknown>, workspace: string): string | null {
-  if (!EDIT_TOOLS.has(toolName)) return null;
-  const raw = input.file_path ?? input.notebook_path ?? input.path;
-  if (typeof raw !== "string" || !raw) return null;
-  const target = resolve(workspace, raw);
-  const rel = relative(resolve(workspace), target);
-  return rel.startsWith("..") || isAbsolute(rel) ? target : null;
-}
 
 /** MCP tools are `mcp__server__tool` in the Agent SDK and `mcp:server.tool` in the mock. */
 export const isMcpTool = (name: string) => name.startsWith("mcp__") || name.startsWith("mcp:");
