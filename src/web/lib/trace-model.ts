@@ -1,4 +1,4 @@
-import type { ContextBreakdown, Decision, Effort, SpanStatus, SpanType, VisorEvent } from "@shared/events";
+import type { ContextBreakdown, ContextDetail, Decision, Effort, SpanStatus, SpanType, VisorEvent } from "@shared/events";
 import type { CostBreakdown, TokenUsage } from "@shared/pricing";
 import { EMPTY_USAGE } from "@shared/pricing";
 import { addUsage, computeCost } from "@server/telemetry/cost";
@@ -78,6 +78,8 @@ export type TraceModel = {
   alerts: Alert[];
   /** Context after each finished turn, for the compaction timeline. */
   contextHistory: { turnIndex: number; used: number; limit: number; breakdown: ContextBreakdown; compacted: boolean }[];
+  /** Claude's latest full context report (live runs only). */
+  contextDetail: ContextDetail | null;
   firstAt: number;
   lastAt: number;
   agents: AgentStat[];
@@ -98,6 +100,7 @@ export const EMPTY_MODEL: TraceModel = {
   paused: null,
   alerts: [],
   contextHistory: [],
+  contextDetail: null,
   firstAt: 0,
   lastAt: 0,
   agents: [],
@@ -221,6 +224,7 @@ export function deriveTrace(events: readonly VisorEvent[]): TraceModel {
           t.costMicroUsd = e.costMicroUsd;
           t.cacheSavingsMicroUsd = e.cacheSavingsMicroUsd;
           t.context = { used: e.contextUsedTokens, limit: e.contextLimitTokens, breakdown: e.contextBreakdown };
+          if (e.contextDetail) m.contextDetail = e.contextDetail;
           m.contextHistory.push({ turnIndex: t.index, used: e.contextUsedTokens, limit: e.contextLimitTokens, breakdown: e.contextBreakdown, compacted: compactedThisTurn });
           if (compactedThisTurn)
             m.alerts.push({ id: `cmp-${e.turnId}`, level: "info", title: "Context compacted", detail: `Turn ${t.index + 1} summarized older tool output`, at: e.at });

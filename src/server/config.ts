@@ -20,6 +20,9 @@ export const VisorConfig = z
     // Defaults for the GUI's "pause before…" switches
     pause: PauseToggles.default({ bash: false, edits: false, mcpWrites: false }),
     triggers: z.array(Trigger).default([]),
+    // Your Claude skills (personal ~/.claude/skills and enabled plugins): off unless listed.
+    // "all" loads every one; a list loads only those (e.g. ["vercel:nextjs"]). Each adds tokens to every request.
+    skills: z.union([z.literal("all"), z.array(z.string().min(1))]).optional(),
     // Passed straight to the Agent SDK's `mcpServers` option
     mcpServers: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
   })

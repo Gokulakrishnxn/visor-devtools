@@ -48,6 +48,20 @@ const Breakdown = z.object({
   messages: tokens,
 });
 
+/**
+ * Claude's own context report for a turn, as the Claude app shows it:
+ * every category, plus what is inside the MCP, skills, agents and memory rows.
+ */
+export const ContextDetail = z.object({
+  categories: z.array(z.object({ id: z.string().optional(), name: z.string(), tokens, kind: z.enum(["used", "free", "buffer", "deferred"]) })),
+  mcpTools: z.array(z.object({ name: z.string(), server: z.string(), tokens, loaded: z.boolean().optional() })).default([]),
+  skills: z.array(z.object({ name: z.string(), source: z.string(), plugin: z.string().optional(), tokens })).default([]),
+  agents: z.array(z.object({ name: z.string(), source: z.string(), tokens })).default([]),
+  memoryFiles: z.array(z.object({ path: z.string(), type: z.string(), tokens })).default([]),
+  systemTools: z.array(z.object({ name: z.string(), tokens })).default([]),
+});
+export type ContextDetail = z.infer<typeof ContextDetail>;
+
 export const VisorEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session.started"),
@@ -132,6 +146,8 @@ export const VisorEvent = z.discriminatedUnion("type", [
     contextUsedTokens: tokens,
     contextLimitTokens: tokens,
     contextBreakdown: Breakdown,
+    /** Claude's full context report (live runs), shown like the Claude app's Context panel. */
+    contextDetail: ContextDetail.optional(),
     /** The runtime's own session id (Claude Agent SDK), used to resume on a follow-up message. */
     runtimeSessionId: z.string().optional(),
     at,
