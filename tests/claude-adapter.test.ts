@@ -225,6 +225,35 @@ describe("persistence and config for Phase 3", () => {
     expect((await app.request("/api/sessions/nope/messages", { method: "POST", headers: { authorization: "Bearer t" }, body: JSON.stringify({ prompt: "x" }) })).status).toBe(404);
   });
 
+  it("deletes a session, or every session of a workspace, without touching other data", async () => {
+    const db = openDatabase(":memory:");
+    const record = new TraceRecorder(db);
+    const runner = new SessionRunner({ adapter: new ClaudeSdkAdapter({ query: fakeQuery({ hookReplies: [] }) }) });
+    runner.subscribe((e) => {
+      record.record(e);
+      if (e.type === "breakpoint.paused") queueMicrotask(() => runner.resolveBreakpoint(e.spanId, { decision: "approved" }));
+    });
+    const run = (sessionId: string, workspacePath: string) => runner.run({ sessionId, prompt: "x", workspacePath, modelId: "claude-opus-5-5", effort: "medium", budgetCapMicroUsd: null });
+    await run("a1", "/w/site");
+    await run("a2", "/w/site");
+    await run("b1", "/w/other");
+    const store = new TraceStore(db);
+    const app = createApp({ runner, token: "t", workspacePath: "/w/site", store });
+    const auth = { authorization: "Bearer t" };
+    const ids = () => store.listSessions().map((s) => s.id).sort();
+
+    expect((await app.request("/api/sessions/a1", { method: "DELETE", headers: auth })).status).toBe(200);
+    expect(ids()).toEqual(["a2", "b1"]);
+    expect(store.events("a1")).toEqual([]); // its recorded events went with it
+    expect(runner.events("a1")).toEqual([]);
+    expect((await app.request("/api/sessions/a1", { method: "DELETE", headers: auth })).status).toBe(404);
+
+    const res = await app.request(`/api/workspaces?path=${encodeURIComponent("/w/site")}`, { method: "DELETE", headers: auth });
+    expect(await res.json()).toEqual({ deleted: 1 });
+    expect(ids()).toEqual(["b1"]);
+    expect(store.events("b1").length).toBeGreaterThan(0);
+  });
+
   it("keeps live runs opt-in", () => {
     expect(resolveRuntime(undefined, undefined)).toBe("mock");
     expect(resolveRuntime(undefined, "claude")).toBe("claude");

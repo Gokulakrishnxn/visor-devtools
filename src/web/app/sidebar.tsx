@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Wallet } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Folder, FolderOpen, FolderPlus, ListFilter, PanelLeftClose, Plug, PlusCircle, ReceiptText, Search, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
@@ -54,20 +54,21 @@ export function Sidebar({
   const stored = useSession((s) => s.sessions);
   const currentId = useSession((s) => s.sessionId);
   const openSession = useSession((s) => s.open);
+  const deleteSession = useSession((s) => s.deleteSession);
+  const deleteWorkspace = useSession((s) => s.deleteWorkspace);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const remove = async (run: () => Promise<string | null>) => setDeleteError(await run());
   const info = useSession((s) => s.info);
   const wallet = useSession((s) => s.wallet);
   const live = info?.runtime === "claude";
   const spending = live && (model.session?.status === "running" || model.session?.status === "paused") ? model.cost.total : 0;
-  const here = folderOf(info?.workspacePath ?? "workspace");
+  const here = info?.workspacePath ?? "workspace";
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const isOpen = (name: string) => open[name] ?? name === here;
+  const isOpen = (path: string) => open[path] ?? path === here;
 
   // Sessions grouped by workspace folder, this workspace first
   const groups = new Map<string, StoredSession[]>([[here, []]]);
-  for (const s of stored) {
-    const name = folderOf(s.workspacePath);
-    groups.set(name, [...(groups.get(name) ?? []), s]);
-  }
+  for (const s of stored) groups.set(s.workspacePath, [...(groups.get(s.workspacePath) ?? []), s]);
 
   const nav = [
     { id: "rules" as const, label: "Overrides & rules", icon: ShieldCheck },
@@ -131,8 +132,20 @@ export function Sidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        {[...groups.entries()].map(([name, list]) => (
-          <Folder2 key={name} name={name} open={isOpen(name)} onToggle={() => setOpen((o) => ({ ...o, [name]: !isOpen(name) }))}>
+        {deleteError && (
+          <p role="alert" className="mx-3 mt-1 rounded-md bg-rose/10 px-2 py-1.5 text-[12px] text-rose/90">
+            {deleteError}
+          </p>
+        )}
+        {[...groups.entries()].map(([path, list]) => (
+          <Folder2
+            key={path}
+            name={folderOf(path)}
+            path={path}
+            open={isOpen(path)}
+            onToggle={() => setOpen((o) => ({ ...o, [path]: !isOpen(path) }))}
+            onDelete={list.length ? () => void remove(() => deleteWorkspace(path)) : undefined}
+          >
             {list.length === 0 && <p className="py-1.5 pl-9 text-[12.5px] text-white/35">No sessions yet</p>}
             {list.map((s) => {
               const live = s.id === currentId ? model.session?.status : undefined;
@@ -147,6 +160,7 @@ export function Sidebar({
                     onView("chat");
                     void openSession(s.id);
                   }}
+                  onDelete={() => void remove(() => deleteSession(s.id))}
                 />
               );
             })}
@@ -175,33 +189,102 @@ export function Sidebar({
   );
 }
 
-function Folder2({ name, open, onToggle, children }: { name: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+/**
+ * A trash button that asks once more before deleting: the first click turns
+ * it into a red "Delete" button for a few seconds, the second click deletes.
+ */
+function DeleteButton({ label, confirmLabel = "Delete", onConfirm }: { label: string; confirmLabel?: string; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      aria-label={armed ? `Confirm: ${label}` : label}
+      title={armed ? "Click again to delete" : label}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (armed) {
+          setArmed(false);
+          onConfirm();
+        } else setArmed(true);
+      }}
+      onBlur={() => setArmed(false)}
+      onKeyDown={(e) => e.key === "Escape" && setArmed(false)}
+      className={cn(
+        "shrink-0 rounded-md transition-colors focus-visible:opacity-100",
+        armed
+          ? "bg-rose/15 px-2 py-0.5 text-[11.5px] font-medium text-rose opacity-100"
+          : "p-1 text-white/40 opacity-0 hover:bg-white/[0.08] hover:text-rose group-hover:opacity-100",
+      )}
+    >
+      {armed ? confirmLabel : <Trash2 size={13} />}
+    </button>
+  );
+}
+
+function Folder2({
+  name,
+  path,
+  open,
+  onToggle,
+  onDelete,
+  children,
+}: {
+  name: string;
+  path: string;
+  open: boolean;
+  onToggle: () => void;
+  onDelete?: () => void;
+  children: React.ReactNode;
+}) {
   const Icon = open ? FolderOpen : Folder;
   return (
     <div className="mt-1">
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-white/85 hover:bg-white/[0.05]" aria-expanded={open}>
-        <Icon size={16} className={open ? "text-indigo/90" : "text-white/55"} />
-        <span className="truncate">{name}</span>
-        <ChevronDown size={13} className={cn("ml-auto text-white/35 transition-transform", !open && "-rotate-90")} />
-      </button>
+      <div className="group flex items-center rounded-lg pr-2 hover:bg-white/[0.05]">
+        <button type="button" onClick={onToggle} title={path} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left text-white/85" aria-expanded={open}>
+          <Icon size={16} className={cn("shrink-0", open ? "text-indigo/90" : "text-white/55")} />
+          <span className="truncate">{name}</span>
+          <ChevronDown size={13} className={cn("ml-auto shrink-0 text-white/35 transition-transform", !open && "-rotate-90")} />
+        </button>
+        {onDelete && <DeleteButton label={`Delete all sessions in ${name}`} confirmLabel="Delete all" onConfirm={onDelete} />}
+      </div>
       {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
     </div>
   );
 }
 
-function SessionRow({ title, active, dot, meta, onClick }: { title: string; active?: boolean; dot?: string; meta?: string; onClick?: () => void }) {
+function SessionRow({
+  title,
+  active,
+  dot,
+  meta,
+  onClick,
+  onDelete,
+}: {
+  title: string;
+  active?: boolean;
+  dot?: string;
+  meta?: string;
+  onClick?: () => void;
+  onDelete?: () => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg py-2 pl-9 pr-3 text-left transition-colors",
+        "group flex items-center rounded-lg pr-2 transition-colors",
         active ? "bg-white/[0.09] text-foreground" : "text-white/70 hover:bg-white/[0.05] hover:text-foreground",
       )}
     >
-      <span className="truncate">{title}</span>
-      {meta && <span className="ml-auto shrink-0 text-[11px] text-white/30 tabular">{meta}</span>}
-      {dot && <i className={cn("size-1.5 shrink-0 rounded-full", !meta && "ml-auto", dot)} />}
-    </button>
+      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-9 pr-1 text-left">
+        <span className="truncate">{title}</span>
+        {meta && <span className="ml-auto shrink-0 text-[11px] text-white/30 tabular">{meta}</span>}
+        {dot && <i className={cn("size-1.5 shrink-0 rounded-full", !meta && "ml-auto", dot)} />}
+      </button>
+      {onDelete && <DeleteButton label={`Delete session ${title}`} onConfirm={onDelete} />}
+    </div>
   );
 }
