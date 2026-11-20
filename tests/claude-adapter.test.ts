@@ -94,6 +94,7 @@ describe("ClaudeSdkAdapter (fake SDK, no network)", () => {
     expect(o.model).toBe("claude-opus-5-5");
     expect(o.effort).toBe("medium");
     expect(o.settingSources).toEqual(["project"]);
+    expect(o.skills).toBeUndefined(); // your Claude skills stay off unless you choose them
     expect(o.includePartialMessages).toBe(true);
     expect(o.maxBudgetUsd).toBe(5);
     expect(o.hooks?.PreToolUse).toHaveLength(1);
@@ -267,6 +268,21 @@ describe("persistence and config for Phase 3", () => {
     expect(await res.json()).toEqual({ deleted: 1 });
     expect(ids()).toEqual(["b1"]);
     expect(store.events("b1").length).toBeGreaterThan(0);
+  });
+
+  it("loads your Claude skills only when .visor.json asks for them", async () => {
+    const captured: Captured = { hookReplies: [] };
+    const runner = new SessionRunner({ adapter: new ClaudeSdkAdapter({ query: fakeQuery(captured), skills: ["vercel:nextjs"] }) });
+    runner.subscribe((e) => {
+      if (e.type === "breakpoint.paused") queueMicrotask(() => runner.resolveBreakpoint(e.spanId, { decision: "approved" }));
+    });
+    await runner.run({ sessionId: "sk", prompt: "x", workspacePath: "/w", modelId: "claude-opus-5-5", effort: "medium", budgetCapMicroUsd: null });
+    expect(captured.options?.settingSources).toEqual(["user", "project"]);
+    expect(captured.options?.skills).toEqual(["vercel:nextjs"]);
+
+    const dir = mkdtempSync(join(tmpdir(), "visor-sk-"));
+    writeFileSync(join(dir, ".visor.json"), JSON.stringify({ skills: "all" }));
+    expect(loadConfig(dir).config.skills).toBe("all");
   });
 
   it("keeps live runs opt-in", () => {

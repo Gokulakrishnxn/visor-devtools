@@ -56,7 +56,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
   const runtime = opts.runtime ?? resolveRuntime();
   const adapter =
     runtime === "claude"
-      ? new ClaudeSdkAdapter({ pricing, mcpServers: config.mcpServers as never })
+      ? new ClaudeSdkAdapter({ pricing, mcpServers: config.mcpServers as never, skills: config.skills })
       : new MockRuntimeAdapter({ speed: opts.mockSpeed ?? 1, pricing });
   const runner = new SessionRunner({
     adapter,
@@ -87,7 +87,7 @@ export function startDaemon(opts: StartOptions = {}): RunningDaemon {
     store: new TraceStore(db),
     wallet,
     defaultCapMicroUsd: config.budget.sessionCapUsd ?? null,
-    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), rules: config.breakpoints.length, triggers: config.triggers.length },
+    info: { runtime, configPath, configError, mcpServers: Object.keys(config.mcpServers), skills: config.skills ?? null, rules: config.breakpoints.length, triggers: config.triggers.length },
   });
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 

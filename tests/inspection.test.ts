@@ -26,6 +26,10 @@ const REPORT: SdkContextUsage = {
     { id: "free_space", name: "Free space", tokens: 150_000, kind: "free" },
     { id: "autocompact_buffer", name: "Autocompact buffer", tokens: 19_000, kind: "buffer" },
   ],
+  mcpTools: [{ name: "mcp__github__search_code", serverName: "github", tokens: 2_000, isLoaded: true }],
+  memoryFiles: [{ path: "/w/CLAUDE.md", type: "Project", tokens: 1_000 }],
+  agents: [{ agentType: "reviewer", source: "projectSettings", tokens: 300 }],
+  skills: { skillFrontmatter: [{ name: "nextjs", source: "plugin", pluginName: "vercel", tokens: 120 }] },
 };
 
 describe("real context from the SDK", () => {
@@ -71,6 +75,15 @@ describe("real context from the SDK", () => {
     expect(turn.contextLimitTokens).toBe(200_000);
     expect(turn.contextBreakdown.projectRules).toBe(4_000);
     expect(turn.contextUsedTokens).toBe(31_001);
+    // The full report is kept for the Claude-style Context panel
+    expect(turn.contextDetail?.categories).toHaveLength(8);
+    expect(turn.contextDetail).toMatchObject({
+      mcpTools: [{ name: "mcp__github__search_code", server: "github", tokens: 2_000, loaded: true }],
+      memoryFiles: [{ path: "/w/CLAUDE.md", type: "Project" }],
+      agents: [{ name: "reviewer", source: "projectSettings" }],
+      skills: [{ name: "nextjs", plugin: "vercel", tokens: 120 }],
+    });
+    expect(deriveTrace(events).contextDetail?.skills[0]?.name).toBe("nextjs");
   });
 });
 

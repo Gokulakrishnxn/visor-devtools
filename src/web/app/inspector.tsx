@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { CompactionTimeline, ContextSummary } from "@/components/visor/context-panel";
+import { ContextDetailPanel } from "@/components/visor/context-detail";
 import { CostReceipt } from "@/components/visor/cost-receipt";
 import { Payload } from "@/components/visor/payload";
 import { Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
@@ -54,7 +55,17 @@ export function Inspector({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === "context" && (
           <div className="space-y-7 p-4">
-            <ContextSummary model={model} />
+            {model.contextDetail ? (
+              <>
+                <ContextDetailPanel detail={model.contextDetail} />
+                <div>
+                  <p className="mb-3 text-[12px] text-white/45">Inside the conversation (V.I.S.O.R.'s split)</p>
+                  <ContextSummary model={model} />
+                </div>
+              </>
+            ) : (
+              <ContextSummary model={model} />
+            )}
             <div>
               <p className="mb-3 text-[12px] text-white/45">Context per turn · compaction</p>
               <CompactionTimeline model={model} />

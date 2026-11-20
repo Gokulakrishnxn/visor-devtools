@@ -1,6 +1,6 @@
 import { query as sdkQuery, type HookCallback, type Options, type PreToolUseHookInput, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { ulid } from "ulid";
-import type { ContextBreakdown, SpanType, VisorEvent } from "@shared/events";
+import type { ContextBreakdown, ContextDetail, SpanType, VisorEvent } from "@shared/events";
 import { parseUsd } from "@shared/money";
 import { EMPTY_USAGE, type TokenUsage } from "@shared/pricing";
 import { computeCost, UsageLedger } from "../telemetry/cost";
@@ -16,6 +16,8 @@ export type ClaudeSdkAdapterOptions = {
   pricing?: PricingRegistry;
   /** MCP servers from `.visor.json`, passed straight to the SDK. */
   mcpServers?: Options["mcpServers"];
+  /** Your Claude skills to load ("all" or names). Unset keeps runs isolated from your user settings. */
+  skills?: "all" | string[];
   now?: () => number;
   newId?: () => string;
 };
@@ -90,7 +92,26 @@ export type SdkContextUsage = {
   categories: { id?: string; name: string; tokens: number; kind: "used" | "free" | "buffer" | "deferred" }[];
   totalTokens: number;
   rawMaxTokens: number;
+  mcpTools?: { name: string; serverName: string; tokens: number; isLoaded?: boolean }[];
+  memoryFiles?: { path: string; type: string; tokens: number }[];
+  agents?: { agentType: string; source: string; tokens: number }[];
+  skills?: { skillFrontmatter?: { name: string; source: string; pluginName?: string; tokens?: number }[] };
+  systemTools?: { name: string; tokens: number }[];
 };
+
+const toks = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.round(n) : 0);
+
+/** The whole report, kept as the Claude app shows it (categories and what is inside them). */
+export function contextDetailFrom(report: SdkContextUsage): ContextDetail {
+  return {
+    categories: report.categories.map((c) => ({ ...(c.id ? { id: c.id } : {}), name: c.name, tokens: toks(c.tokens), kind: c.kind })),
+    mcpTools: (report.mcpTools ?? []).map((t) => ({ name: t.name, server: t.serverName, tokens: toks(t.tokens), ...(t.isLoaded === undefined ? {} : { loaded: t.isLoaded }) })),
+    skills: (report.skills?.skillFrontmatter ?? []).map((s) => ({ name: s.name, source: s.source, ...(s.pluginName ? { plugin: s.pluginName } : {}), tokens: toks(s.tokens) })),
+    agents: (report.agents ?? []).map((a) => ({ name: a.agentType, source: a.source, tokens: toks(a.tokens) })),
+    memoryFiles: (report.memoryFiles ?? []).map((f) => ({ path: f.path, type: f.type, tokens: toks(f.tokens) })),
+    systemTools: (report.systemTools ?? []).map((t) => ({ name: t.name, tokens: toks(t.tokens) })),
+  };
+}
 
 /**
  * Maps the SDK's real context report onto V.I.S.O.R.'s 7 categories (PRD §4.3).
@@ -430,6 +451,7 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
             contextUsedTokens: Object.values(breakdown).reduce((a, b) => a + b, 0),
             contextLimitTokens: limit,
             contextBreakdown: breakdown,
+            ...(contextReport ? { contextDetail: contextDetailFrom(contextReport) } : {}),
             ...(runtimeSessionId ? { runtimeSessionId } : {}),
             at: this.now(),
           });
@@ -448,8 +470,9 @@ export class ClaudeSdkAdapter implements AgentRuntimeAdapter {
       effort: options.effort,
       cwd: options.workspacePath,
       abortController: controller,
-      // Isolation: no user/local settings; project settings load CLAUDE.md
-      settingSources: ["project"],
+      // Isolation: project settings only (CLAUDE.md, project skills), unless you chose to load your Claude skills
+      settingSources: this.opts.skills ? ["user", "project"] : ["project"],
+      ...(this.opts.skills ? { skills: this.opts.skills } : {}),
       includePartialMessages: true,
       thinking: { type: "adaptive", display: "summarized" } as Options["thinking"],
       permissionMode: "default",

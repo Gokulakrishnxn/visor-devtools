@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import type { ContextBreakdown, VisorEvent } from "@shared/events";
+import type { ContextBreakdown, ContextDetail, VisorEvent } from "@shared/events";
 import { computeCost, UsageLedger } from "../telemetry/cost";
 import { emptyBreakdown } from "../telemetry/context";
 import { PricingRegistry } from "../telemetry/pricing";
@@ -214,6 +214,7 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
         contextUsedTokens: Object.values(context).reduce((n, v) => n + v, 0),
         contextLimitTokens: price.contextWindow,
         contextBreakdown: context,
+        contextDetail: demoContextDetail(context, price.contextWindow),
         at: this.now(),
       };
     }
@@ -226,4 +227,31 @@ export class MockRuntimeAdapter implements AgentRuntimeAdapter {
       at: this.now(),
     };
   }
+}
+
+/** A sample of Claude's context report for the demo, shaped like a live run's. */
+function demoContextDetail(c: ContextBreakdown, limit: number): ContextDetail {
+  const messages = c.mentionedFiles + c.toolResults + c.thinking + c.subagents + c.messages;
+  const buffer = Math.round(limit * 0.033);
+  const rows = [
+    { id: "messages", name: "Messages", tokens: messages, kind: "used" as const },
+    { id: "system_tools", name: "System tools", tokens: Math.round(c.toolSchemas * 0.7), kind: "used" as const },
+    { id: "mcp_tools", name: "MCP tools", tokens: c.toolSchemas - Math.round(c.toolSchemas * 0.7), kind: "used" as const },
+    { id: "system_prompt", name: "System prompt", tokens: Math.round(c.projectRules * 0.8), kind: "used" as const },
+    { id: "memory_files", name: "Memory files", tokens: c.projectRules - Math.round(c.projectRules * 0.8), kind: "used" as const },
+  ];
+  const used = rows.reduce((n, r) => n + r.tokens, 0);
+  return {
+    categories: [
+      ...rows,
+      { id: "autocompact_buffer", name: "Autocompact buffer", tokens: buffer, kind: "buffer" },
+      { id: "free_space", name: "Free space", tokens: Math.max(0, limit - used - buffer), kind: "free" },
+      { id: "mcp_tools_deferred", name: "MCP tools (deferred)", tokens: 4_200, kind: "deferred" },
+    ],
+    mcpTools: [{ name: "mcp__github__search_code", server: "github", tokens: c.toolSchemas - Math.round(c.toolSchemas * 0.7), loaded: true }],
+    skills: [],
+    agents: [{ name: "explore", source: "projectSettings", tokens: 180 }],
+    memoryFiles: [{ path: "CLAUDE.md", type: "Project", tokens: c.projectRules - Math.round(c.projectRules * 0.8) }],
+    systemTools: [],
+  };
 }
