@@ -1,4 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
+import { type Dirent, readdirSync, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join } from "node:path";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
@@ -38,7 +41,20 @@ const StartSession = z.object({
   effort: Effort.optional(),
   /** Dollars as text, e.g. "5" or "0.25"; converted to integer µUSD. */
   capUsd: z.string().optional(),
+  /** The folder Claude works in (absolute path); defaults to the folder vhud started in. */
+  workspacePath: z.string().max(4096).optional(),
 });
+
+/** The real path of an existing folder, or null (relative paths, files and missing paths are refused). */
+export function existingFolder(path: string): string | null {
+  if (!isAbsolute(path)) return null;
+  try {
+    const real = realpathSync(path);
+    return statSync(real).isDirectory() ? real : null;
+  } catch {
+    return null;
+  }
+}
 
 function sameToken(a: string, b: string): boolean {
   const x = Buffer.from(a);
@@ -73,6 +89,8 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const body = StartSession.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: "invalid request", issues: body.error.issues }, 400);
     const { prompt, modelId, effort, capUsd } = body.data;
+    const folder = body.data.workspacePath ? existingFolder(body.data.workspacePath) : workspacePath;
+    if (!folder) return c.json({ error: "That folder doesn't exist or isn't a folder." }, 400);
     // Only the mock runtime has a built-in demo; a real run needs something to do
     if (info.runtime === "claude" && !prompt.trim()) return c.json({ error: "Type a message first" }, 400);
     let requested: number | null;
@@ -87,7 +105,7 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const sessionId = ulid();
     // Fire and forget: progress streams over the WebSocket
     runner
-      .run({ sessionId, prompt, workspacePath, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
+      .run({ sessionId, prompt, workspacePath: folder, modelId: modelId ?? defaultModel, effort: effort ?? defaultEffort, budgetCapMicroUsd: cap })
       .catch((err: unknown) => console.error(`[visor] session ${sessionId} failed:`, err));
     return c.json({ sessionId, capMicroUsd: cap, limitedByCredit }, 202);
   });
@@ -156,6 +174,26 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
   // Your Claude profile (display name and plan) for the sidebar; looked up once
   let profile: Promise<ClaudeProfile> | null = null;
   api.get("/profile", async (c) => c.json(await (profile ??= (lookupProfile ?? claudeProfile)())));
+
+  // Folder browser for "Open folder": folder names only (never files), hidden ones left out
+  api.get("/folders", (c) => {
+    const asked = c.req.query("path");
+    const path = existingFolder(asked || homedir());
+    if (!path) return c.json({ error: "That folder doesn't exist or isn't a folder." }, 404);
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(path, { withFileTypes: true });
+    } catch {
+      return c.json({ error: "V.I.S.O.R. can't read that folder." }, 403);
+    }
+    const folders = entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules")
+      .map((e) => ({ name: e.name, path: join(path, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+      .slice(0, 500);
+    const parent = dirname(path);
+    return c.json({ path, parent: parent === path ? null : parent, home: homedir(), folders });
+  });
 
   api.get("/info", (c) => c.json({ workspacePath, defaultModel, defaultEffort, maxCapMicroUsd, ...info }));
 
