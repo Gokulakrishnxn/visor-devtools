@@ -98,9 +98,9 @@ export function HarnessApp() {
       onNew={() => {
         setView("chat");
         setDrawer(false);
-        // Live: an empty session waits for your prompt; mock: replay the demo
-        if (live) clearSession();
-        else void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort });
+        // Only the mock runtime replays a demo; anything else (live, or not loaded yet) waits for your message
+        clearSession();
+        if (info?.runtime === "mock") void h.start({ capUsd: composer.capUsd, modelId: composer.modelId, effort: composer.effort });
       }}
       onSearch={() => h.ui.setPalette(true)}
       onWallet={() => (setDrawer(false), setWalletOpen(true))}
@@ -192,7 +192,7 @@ export function HarnessApp() {
               <>
                 {model.turns.length === 0 && h.sessionId && (
                   <div className="pt-24 text-center text-[14px] text-white/45">
-                    This session was recorded before V.I.S.O.R. stored replays, so there's nothing to show. New sessions replay in full.
+                    {model.session?.status === "running" || model.session?.status === "paused" || !model.session ? "Starting…" : "Nothing was recorded for this session."}
                   </div>
                 )}
                 {model.turns.length === 0 && !h.sessionId && (

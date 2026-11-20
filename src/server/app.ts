@@ -68,6 +68,8 @@ export function createApp({ runner, token, workspacePath, defaultModel = "claude
     const body = StartSession.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: "invalid request", issues: body.error.issues }, 400);
     const { prompt, modelId, effort, capUsd } = body.data;
+    // Only the mock runtime has a built-in demo; a real run needs something to do
+    if (info.runtime === "claude" && !prompt.trim()) return c.json({ error: "Type a message first" }, 400);
     let requested: number | null;
     try {
       requested = capUsd ? parseUsd(capUsd) : defaultCapMicroUsd;
