@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, ChevronUp, FileCode2, FileJson2, FileText as FileTextIcon } from "lucide-react";
 import { BreakpointCard } from "@/components/visor/breakpoint-card";
+import { Markdown } from "@/components/visor/markdown";
 import { diffStats } from "@/components/visor/code";
 import { SPAN_ICON, StatusDot, Usd, fmtMs, fmtTokens } from "@/components/visor/primitives";
 import type { TraceModel, TraceSpan, TraceTurn } from "@/lib/trace-model";
@@ -133,7 +134,7 @@ function Turn({ model, turn, selectedId, onSelect, onReview }: ConversationProps
         )}
       </div>
 
-      {answer && <div className="mt-5 whitespace-pre-wrap text-[15.5px] leading-[1.75] text-foreground/95">{answer}</div>}
+      {answer && <Markdown text={answer} className="mt-5 text-[15.5px] leading-[1.75] text-foreground/95" />}
 
       {edits.length > 0 && done && (
         <div className="mt-5 flex flex-wrap gap-2.5">

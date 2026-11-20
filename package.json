@@ -1,7 +1,7 @@
 {
   "name": "visor-devtools",
   "version": "0.1.0",
-  "description": "V.I.S.O.R. (Verified Inspection, Spans, Overrides & Runtime) \u2014 a local-first harness and live debugger for Claude with span-level tracing, mid-flight overrides, and real-money cost control.",
+  "description": "V.I.S.O.R. (Verified Inspection, Spans, Overrides & Runtime) — a local-first harness and live debugger for Claude with span-level tracing, mid-flight overrides, and real-money cost control.",
   "license": "MIT",
   "author": "Gokulakrishnan (https://www.gokulakrishnan.dev)",
   "homepage": "https://www.gokulakrishnan.dev/visor-devtools",
@@ -61,6 +61,8 @@
     "motion": "^14.14.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "shiki": "^4.6.0",
     "tailwind-merge": "^3.7.0",
     "ulid": "^3.0.2",
