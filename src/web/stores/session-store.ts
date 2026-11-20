@@ -42,6 +42,8 @@ type SessionState = {
   /** Workspace folders removed from the sidebar, with when (they come back when a newer session starts there). */
   hiddenWorkspaces: Record<string, number>;
   hideWorkspace: (workspacePath: string) => void;
+  /** Brings every removed workspace back into the sidebar. */
+  showHiddenWorkspaces: () => void;
   /** Open a stored session: its events load from SQLite and replay instantly. */
   open: (sessionId: string) => Promise<void>;
   start: (opts?: { prompt?: string; capUsd?: string; modelId?: string; effort?: "low" | "medium" | "high" }) => Promise<void>;
@@ -229,6 +231,15 @@ export const useSession = create<SessionState>((set, get) => ({
       localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenWorkspaces));
     } catch {
       // private window: it stays hidden until reload
+    }
+  },
+
+  showHiddenWorkspaces() {
+    set({ hiddenWorkspaces: {} });
+    try {
+      localStorage.removeItem(HIDDEN_KEY);
+    } catch {
+      // nothing stored
     }
   },
 
