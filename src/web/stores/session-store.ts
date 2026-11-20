@@ -24,6 +24,9 @@ type SessionState = {
   selectedSpanId: string | null;
   error: string | null;
   info: DaemonInfo | null;
+  /** The folder new sessions run in (null = the folder vhud started in). */
+  folder: string | null;
+  setFolder: (path: string | null) => void;
   /** The Claude account signed in on this computer (name and plan only). */
   profile: ClaudeProfile | null;
   sessions: StoredSession[];
@@ -59,6 +62,14 @@ type SessionState = {
 };
 
 const TOKEN_KEY = "visor-token";
+const FOLDER_KEY = "visor-folder";
+function readFolder(): string | null {
+  try {
+    return localStorage.getItem(FOLDER_KEY);
+  } catch {
+    return null;
+  }
+}
 export function forgetToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
@@ -161,6 +172,16 @@ export const useSession = create<SessionState>((set, get) => ({
   selectedSpanId: null,
   error: null,
   profile: null,
+  folder: readFolder(),
+  setFolder(path) {
+    set({ folder: path });
+    try {
+      if (path) localStorage.setItem(FOLDER_KEY, path);
+      else localStorage.removeItem(FOLDER_KEY);
+    } catch {
+      // not remembered in a private window
+    }
+  },
   info: null,
   sessions: [],
   wallet: null,
@@ -323,7 +344,14 @@ export const useSession = create<SessionState>((set, get) => ({
       const path = current ? `/api/sessions/${current}/messages` : "/api/sessions";
       const { sessionId } = await api<{ sessionId: string }>(get().token, path, {
         method: "POST",
-        body: JSON.stringify({ prompt: opts.prompt ?? "", capUsd: opts.capUsd || "5", modelId: opts.modelId, effort: opts.effort }),
+        body: JSON.stringify({
+          prompt: opts.prompt ?? "",
+          capUsd: opts.capUsd || "5",
+          modelId: opts.modelId,
+          effort: opts.effort,
+          // A new session runs in the folder you picked; a follow-up stays in its own folder
+          ...(!current && get().folder ? { workspacePath: get().folder } : {}),
+        }),
       });
       set({ sessionId, cursor: null, selectedSpanId: null, error: null });
     } catch (err) {

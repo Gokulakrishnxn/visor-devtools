@@ -44,6 +44,7 @@ export function HarnessApp() {
   const info = useSession((s) => s.info);
   const clearSession = useSession((s) => s.clear);
   const live = info?.runtime === "claude";
+  const folder = useSession((s) => s.folder);
   const [view, setView] = useState<SidebarView>("chat");
   // Closed by default for a calm canvas; steps, file cards and the toolbar open it
   const [panel, setPanel] = useState<RightPanel>(null);
@@ -205,7 +206,7 @@ export function HarnessApp() {
                     {h.connection === "open" && (
                       <p className="mt-2 text-[13.5px] text-white/45">
                         {live ? "Live mode: every prompt runs the real Claude Agent SDK in " : "Mock mode: a free demo run. Start the daemon with --live for real runs in "}
-                        <span className="font-mono text-white/60">{info?.workspacePath}</span>
+                        <span className="font-mono text-white/60">{folder ?? info?.workspacePath}</span>
                       </p>
                     )}
                   </div>

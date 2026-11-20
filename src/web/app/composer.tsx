@@ -4,6 +4,7 @@ import { Usd } from "@/components/visor/primitives";
 import type { TraceModel } from "@/lib/trace-model";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/stores/session-store";
+import { FolderButton } from "./folder-picker";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Opus 5.5" },
@@ -85,6 +86,7 @@ export function Composer({
           <Plus size={16} />
         </button>
 
+        <FolderButton disabled={running} />
         <div ref={permRef} className="relative">
           <button type="button" onClick={() => setMenu(menu === "perm" ? null : "perm")} className="flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] text-white/70 hover:bg-white/[0.06]" aria-expanded={menu === "perm"}>
             <ShieldCheck size={15} className="text-white/55" />
